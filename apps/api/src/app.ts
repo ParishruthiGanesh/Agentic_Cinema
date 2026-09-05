@@ -5,6 +5,7 @@ import { z } from "zod";
 import { readFile, stat } from "node:fs/promises";
 import { join, normalize, extname } from "node:path";
 import {
+  ClickHouseMemory,
   CreateProjectInput,
   EVAL_PREFIX,
   Stage,
@@ -226,6 +227,40 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner)
     const project = getProject(c.req.param("id"));
     const job = jobs.start(project.id, "evaluate", "baseline vs CineMemory", () => runEvaluation(ctx, project.id).then(() => undefined));
     return c.json(job, 202);
+  });
+
+  /* ---- production memory (ClickHouse) ---- */
+  app.get("/api/memory/status", async (c) => {
+    const health = await ctx.memory.healthCheck();
+    const stats = await ctx.memory.stats().catch((e) => ({ tables: [], trace: { source: ctx.memory.name as "local" | "clickhouse", rows: 0, latencyMs: 0, sql: undefined }, error: (e as Error).message }));
+    const recent = ctx.memory instanceof ClickHouseMemory ? ctx.memory.recentQueries.slice(0, 20) : [];
+    return c.json({ ...info.memory, health, ...stats, recentQueries: recent });
+  });
+  app.get("/api/projects/:id/memory", async (c) => {
+    const project = getProject(c.req.param("id"));
+    const stats = await ctx.memory.stats(project.id);
+    const analytics = ctx.memory instanceof ClickHouseMemory ? await ctx.memory.analytics(project.id) : null;
+    const actions = await ctx.memory.agentActions(project.id, 30);
+    const retrievals = ctx.repo.listEvents(project.id).filter((e) => e.type === "memory.retrieved").slice(-30).reverse();
+    return c.json({ name: ctx.memory.name, persistent: ctx.memory.persistent, stats: stats.tables, trace: stats.trace, analytics, agentActions: actions, retrievals });
+  });
+  app.get("/api/projects/:id/memory/scene/:n", async (c) => {
+    const project = getProject(c.req.param("id"));
+    const n = Number(c.req.param("n"));
+    const world = ctx.repo.getWorld(project.id);
+    const screenplay = ctx.repo.getScreenplay(project.id);
+    const scene = screenplay?.scenes.find((s) => s.number === n);
+    const entityIds = scene ? [...scene.characterIds, ...scene.propIds] : undefined;
+    const [state, knowledge, history] = await Promise.all([ctx.memory.stateBefore(project.id, n, entityIds), ctx.memory.knowledgeBefore(project.id, n), ctx.memory.violationHistory(project.id, scene ? { sceneId: scene.id } : {})]);
+    const context = world && screenplay && scene ? retrieveSceneContext(world, screenplay, state.changes, scene.id) : null;
+    return c.json({ sceneNumber: n, state, knowledge, history, context });
+  });
+  app.post("/api/memory/query", async (c) => {
+    if (!(ctx.memory instanceof ClickHouseMemory)) return c.json({ error: "ClickHouse memory is not configured" }, 400);
+    const body = z.object({ sql: z.string().min(1).max(4000) }).parse(await c.req.json());
+    if (!/^\s*(SELECT|WITH|SHOW|DESCRIBE|EXPLAIN)\b/i.test(body.sql)) return c.json({ error: "Only read-only queries are allowed" }, 400);
+    const { rows, trace } = await ctx.memory.select(body.sql, {}, "user query");
+    return c.json({ rows: rows.slice(0, 500), trace });
   });
 
   app.get("/api/partner/metrics", async (c) => c.json(await ctx.partner.listMetrics(c.req.query("name") || undefined)));

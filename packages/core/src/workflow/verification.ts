@@ -1,4 +1,4 @@
-import type { AgentContext } from "../agents/context.js";
+import { memoryLabel, type AgentContext } from "../agents/context.js";
 import type { CriticResult } from "../critics/common.js";
 import { runNarrativeCritic } from "../critics/narrative.js";
 import { runSourceFidelityCritic } from "../critics/sourceFidelity.js";
@@ -45,6 +45,8 @@ export function reconcileViolations(ctx: AgentContext, projectId: string, result
     newIds.push(v.id);
   }
   repo.replaceChecksForCritic(projectId, result.critic, result.checks);
+  void ctx.memory.recordViolations(repo.listViolations(projectId).filter((v) => v.critic === result.critic)).catch(() => undefined);
+  void ctx.memory.recordChecks(result.checks).catch(() => undefined);
   repo.saveCriticRun({
     id: result.runId,
     projectId,
@@ -66,10 +68,15 @@ export interface VerificationOptions {
 }
 
 export async function runVerification(ctx: AgentContext, project: Project, opts: VerificationOptions): Promise<Record<string, { newIds: string[]; resolvedIds: string[]; stillOpen: string[]; checks: number; notEvaluated: number }>> {
-  const { repo, events, llm, config } = ctx;
+  const { repo, events, llm, config, memory } = ctx;
   const world = repo.getWorld(project.id);
   const screenplay = repo.getScreenplay(project.id);
-  const changes = repo.listStateChanges(project.id);
+  // The change log the critics reason over comes from production memory.
+  const { changes, trace } = await memory.allChanges(project.id);
+  if (!opts.silent && opts.critics.includes("narrative")) {
+    const k = await memory.knowledgeBefore(project.id, Number.MAX_SAFE_INTEGER);
+    events.emit(project.id, "narrative_critic", "memory.retrieved", `Loaded production history from ${memoryLabel(ctx)}: ${trace.rows} state changes, ${k.events.length} knowledge events (${trace.latencyMs + k.trace.latencyMs}ms)`, { source: trace.source, sql: k.trace.sql ?? trace.sql, rows: trace.rows, knowledgeEvents: k.events.length, latencyMs: trace.latencyMs + k.trace.latencyMs });
+  }
   const out: Record<string, { newIds: string[]; resolvedIds: string[]; stillOpen: string[]; checks: number; notEvaluated: number }> = {};
   if (!world || !screenplay) throw new Error("Verification requires world memory and a screenplay");
 

@@ -8,7 +8,7 @@ import { buildContext } from "./context.js";
  */
 async function main() {
   const [cmd, arg] = process.argv.slice(2);
-  const { ctx, info } = buildContext();
+  const { ctx, info } = await buildContext();
   for (const w of info.warnings) console.warn(`[cinememory] ${w}`);
   ctx.events.subscribe((e) => console.log(`${e.ts.slice(11, 19)} ${e.level.padEnd(7)} ${e.agent.padEnd(22)} ${e.message}`));
 

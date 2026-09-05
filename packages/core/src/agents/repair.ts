@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { AgentContext } from "./context.js";
+import { memoryLabel, type AgentContext } from "./context.js";
+import { persistWorldMemory } from "../workflow/memoryStage.js";
 import { SCENE_REWRITE_SYSTEM, sceneRewritePrompt } from "./prompts/repair.js";
-import { foldScreenplay, retrieveSceneContext } from "../memory/worldMemory.js";
+import { retrieveSceneContext } from "../memory/worldMemory.js";
 import { Scene, type Project, type RepairAttempt, type Violation, type ViolationCode, type WorldState } from "../model/index.js";
 import { runVerification } from "../workflow/verification.js";
 import { generateShotMedia } from "../media/generation.js";
@@ -61,10 +62,12 @@ function chooseTargetScene(ctx: AgentContext, project: Project, v: Violation): s
 }
 
 async function rewriteScene(ctx: AgentContext, project: Project, v: Violation, sceneId: string, attempt: number): Promise<{ ok: boolean; detail: string; provenance?: RepairAttempt["provenance"] }> {
-  const { repo, llm, events } = ctx;
+  const { repo, llm, events, memory } = ctx;
   const world = repo.getWorld(project.id)!;
   const screenplay = repo.getScreenplay(project.id)!;
-  const changes = repo.listStateChanges(project.id);
+  const scene0 = screenplay.scenes.find((s) => s.id === sceneId)!;
+  const { changes, trace } = await memory.stateBefore(project.id, scene0.number, [...scene0.characterIds, ...scene0.propIds]);
+  events.emit(project.id, "repair", "memory.retrieved", `Retrieved scene ${scene0.number} history from ${memoryLabel(ctx)} for repair: ${trace.rows} state changes (${trace.latencyMs}ms)`, { sceneId, source: trace.source, sql: trace.sql, rows: trace.rows, latencyMs: trace.latencyMs });
   const sceneCtx = retrieveSceneContext(world, screenplay, changes, sceneId);
   const scene = sceneCtx.scene;
   const extra = v.code === "REQUIRED_FACT_MISSING" && v.constraintId ? `Add the required fact ("${v.constraint}") to this scene's dialogue or narration and include "${v.constraintId}" in satisfiesConstraints.` : v.code === "REQUIRED_EVENT_MISSING" ? `Dramatize the missing event in this scene and add its id to eventIds.` : v.code === "REQUIRED_CHARACTER_MISSING" ? `Include the missing character in this scene with at least one line or action.` : undefined;
@@ -86,13 +89,11 @@ async function rewriteScene(ctx: AgentContext, project: Project, v: Violation, s
   };
   updated.totalDurationSec = updated.scenes.reduce((s, sc) => s + sc.durationSec, 0);
   repo.saveScreenplay(updated);
-  // Refold memory so critics see the new state.
-  const folded = foldScreenplay(world, updated);
-  repo.saveWorld(folded.world);
-  repo.replaceStateChanges(project.id, folded.changes);
+  await memory.recordScreenplay(updated);
+  // Refold memory so critics see the new state (and production memory gets the new version).
+  const folded = await persistWorldMemory(ctx, project.id, world, updated);
   const changedLines = Math.max(scene.lines.length, rewritten.lines.length) - scene.lines.filter((l, i) => rewritten.lines[i]?.text === l.text).length;
   events.emit(project.id, "repair", "repair.scene.rewritten", `Scene ${scene.number} rewritten (v${version}): ${changedLines} line${changedLines === 1 ? "" : "s"} changed`, { sceneId, violationId: v.id, version, provenance: res.provenance });
-  events.emit(project.id, "world_memory", "memory.rebuilt", `World memory refolded: ${folded.changes.length} state changes`, { version: folded.world.version });
   // Shots derived from the old scene are stale; mark them for re-planning.
   const plan = repo.getShotPlan(project.id);
   if (plan) {
@@ -146,6 +147,7 @@ export async function repairViolation(ctx: AgentContext, project: Project, viola
     if (attemptNo > config.repairMaxAttempts) {
       const escalated: Violation = { ...v, status: "escalated", resolutionNote: `Unresolved after ${config.repairMaxAttempts} repair attempt${config.repairMaxAttempts === 1 ? "" : "s"}; needs manual review` };
       repo.saveViolation(escalated);
+      await ctx.memory.recordViolations([escalated]).catch(() => undefined);
       events.emit(project.id, "repair", "repair.escalated", `${v.code} escalated to user after ${config.repairMaxAttempts} attempts`, { violationId: v.id }, "error");
       return escalated;
     }
@@ -185,9 +187,11 @@ export async function repairViolation(ctx: AgentContext, project: Project, viola
       const after = repo.getViolation(project.id, violationId)!;
       attempt.outcome = after.status === "resolved" ? "resolved" : "still_failing";
       const withAttempt: Violation = { ...after, repairAttempts: [...after.repairAttempts, attempt] };
+      await ctx.memory.recordRepairAttempt(project.id, violationId, attempt).catch(() => undefined);
       if (after.status === "resolved") {
         const done = { ...withAttempt, resolutionNote: `Repaired: ${attempt.strategy} (${attempt.target})` };
         repo.saveViolation(done);
+        await ctx.memory.recordViolations([done]).catch(() => undefined);
         events.emit(project.id, "repair", "repair.verified", `Verification passed: ${v.code}${v.scope.sceneNumber ? ` in Scene ${v.scope.sceneNumber}` : ""} resolved on attempt ${attemptNo}`, { violationId: v.id, attempt: attemptNo }, "success");
         return done;
       }
@@ -198,6 +202,7 @@ export async function repairViolation(ctx: AgentContext, project: Project, viola
       attempt.detail = `${attempt.detail} error: ${(err as Error).message}`.trim();
       const cur = repo.getViolation(project.id, violationId)!;
       repo.saveViolation({ ...cur, status: "repairing", repairAttempts: [...cur.repairAttempts, attempt] });
+      await ctx.memory.recordRepairAttempt(project.id, violationId, attempt).catch(() => undefined);
       events.emit(project.id, "repair", "repair.attempt.error", `Repair attempt ${attemptNo} for ${cur.code} failed: ${(err as Error).message}`, { violationId: v.id, attempt: attemptNo }, "error");
     }
   }

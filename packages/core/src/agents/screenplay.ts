@@ -85,6 +85,7 @@ export async function runScreenplay(ctx: AgentContext, project: Project, world: 
   });
   const screenplay = { ...normalizeScreenplay(project, result.data), provenance: result.provenance };
   repo.saveScreenplay(screenplay);
+  await ctx.memory.recordScreenplay(screenplay);
   const lines = screenplay.scenes.reduce((s, sc) => s + sc.lines.length, 0);
   events.emit(project.id, "screenplay", "screenplay.completed", `Screenplay written: ${screenplay.scenes.length} scenes, ${lines} lines, ${screenplay.totalDurationSec}s`, { provenance: result.provenance }, "success");
   return screenplay;

@@ -6,7 +6,7 @@ import { runScreenplay } from "../agents/screenplay.js";
 import { runSourceIntelligence } from "../agents/sourceIntelligence.js";
 import { assembleFilm } from "../film/assembly.js";
 import { applyVerificationToShots, generateAllMedia } from "../media/generation.js";
-import { foldScreenplay } from "../memory/worldMemory.js";
+import { persistWorldMemory } from "./memoryStage.js";
 import { STAGE_ORDER, type CreateProjectInput, type Project, type Stage, type StageRecord } from "../model/index.js";
 import { runVerification } from "./verification.js";
 import { slugify } from "../model/common.js";
@@ -36,11 +36,7 @@ export const STAGE_RUNNERS: Record<Exclude<Stage, "created">, StageRunner> = {
     const world = ctx.repo.getWorld(project.id);
     const screenplay = ctx.repo.getScreenplay(project.id);
     if (!world || !screenplay) throw new Error("Screenplay missing");
-    const folded = foldScreenplay(world, screenplay);
-    ctx.repo.saveWorld(folded.world);
-    ctx.repo.replaceStateChanges(project.id, folded.changes);
-    const facts = folded.world.knowledgeFacts.filter((f) => f.holders.length);
-    ctx.events.emit(project.id, "world_memory", "memory.built", `World memory built: ${folded.changes.length} state changes across ${screenplay.scenes.length} scenes; ${facts.length} knowledge facts with holders`, { version: folded.world.version, changes: folded.changes.length }, "success");
+    await persistWorldMemory(ctx, project.id, world, screenplay);
   },
   shots_planned: async (ctx, project) => {
     const world = ctx.repo.getWorld(project.id);
@@ -161,6 +157,7 @@ export async function runPipeline(ctx: AgentContext, projectId: string, opts: Ru
   if (!project) throw new Error(`Project ${projectId} not found`);
   const target = opts.toStage ?? "narrative_verified";
   const targetIdx = stageIndex(target);
+  (ctx.llm as { setProject?: (id: string) => void }).setProject?.(project.id);
   ctx.events.emit(project.id, "orchestrator", "pipeline.started", `Pipeline run to "${target}"`, { toStage: target, force: !!opts.force });
 
   for (const stage of STAGE_ORDER) {

@@ -12,7 +12,9 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "demo:seed": "pnpm --filter @cinememory/api seed:demo",
-    "eval": "pnpm --filter @cinememory/api eval"
+    "eval": "pnpm --filter @cinememory/api eval",
+    "clickhouse:local": "python3 deploy/local-clickhouse/server.py --port 8123 --data ./data/clickhouse",
+    "gemini:smoke": "pnpm --filter @cinememory/api gemini:smoke"
   },
   "engines": {
     "node": ">=22.13"

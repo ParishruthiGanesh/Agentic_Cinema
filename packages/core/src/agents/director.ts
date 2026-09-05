@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentContext } from "./context.js";
+import { memoryLabel, type AgentContext } from "./context.js";
 import { DIRECTOR_SYSTEM, directorPrompt } from "./prompts/director.js";
 import { retrieveSceneContext, type SceneContext } from "../memory/worldMemory.js";
 import { Shot, ShotPlan, type Project, type Screenplay, type StateChange, type WorldState } from "../model/index.js";
@@ -129,13 +129,16 @@ export function buildShots(project: Project, ctx: SceneContext, out: ScenePlanOu
   });
 }
 
-export async function runDirector(ctx: AgentContext, project: Project, world: WorldState, screenplay: Screenplay, changes: StateChange[], opts: ComposeOptions = { injectMemory: true, visualStyle: project.brief.visualStyle }): Promise<ShotPlan> {
-  const { events, llm, repo } = ctx;
-  events.emit(project.id, "director", "shots.planning.started", `Planning shots for ${screenplay.scenes.length} scenes`, { provider: llm.name, injectMemory: opts.injectMemory });
+export async function runDirector(ctx: AgentContext, project: Project, world: WorldState, screenplay: Screenplay, _changes: StateChange[], opts: ComposeOptions = { injectMemory: true, visualStyle: project.brief.visualStyle }): Promise<ShotPlan> {
+  const { events, llm, repo, memory } = ctx;
+  events.emit(project.id, "director", "shots.planning.started", `Planning shots for ${screenplay.scenes.length} scenes`, { provider: llm.name, injectMemory: opts.injectMemory, memory: memory.name });
   const shots: Shot[] = [];
   for (const scene of [...screenplay.scenes].sort((a, b) => a.number - b.number)) {
-    const sceneCtx = retrieveSceneContext(world, screenplay, changes, scene.id);
-    events.emit(project.id, "world_memory", "memory.retrieved", `Retrieved state for scene ${scene.number}: ${sceneCtx.characters.length} characters, ${sceneCtx.forbiddenFacts.length} forbidden facts, ${sceneCtx.visualConstraints.length} visual constraints`, { sceneId: scene.id });
+    // Retrieve only the history relevant to this scene from production memory (not the whole film).
+    const entityIds = [...scene.characterIds, ...scene.propIds];
+    const { changes: sceneChanges, trace } = opts.injectMemory ? await memory.stateBefore(project.id, scene.number, entityIds) : { changes: [], trace: undefined };
+    const sceneCtx = retrieveSceneContext(world, screenplay, sceneChanges, scene.id);
+    if (trace) events.emit(project.id, "world_memory", "memory.retrieved", `Retrieved scene ${scene.number} history from ${memoryLabel(ctx)}: ${trace.rows} state changes for ${entityIds.length} entities (${trace.latencyMs}ms) → ${sceneCtx.characters.length} characters, ${sceneCtx.forbiddenFacts.length} forbidden facts, ${sceneCtx.visualConstraints.length} visual constraints`, { sceneId: scene.id, source: trace.source, sql: trace.sql, rows: trace.rows, latencyMs: trace.latencyMs });
     const result = await llm.generateStructured({
       task: "shot_planning",
       fixtureKey: `shot_planning:${scene.id}`,
@@ -148,8 +151,10 @@ export async function runDirector(ctx: AgentContext, project: Project, world: Wo
     shots.push(...sceneShots);
     events.emit(project.id, "director", "shots.scene.planned", `Scene ${scene.number} planned: ${sceneShots.length} shots`, { sceneId: scene.id, shotIds: sceneShots.map((s) => s.id), provenance: result.provenance });
   }
-  const plan: ShotPlan = { projectId: project.id, shots, version: 1, updatedAt: new Date().toISOString() };
+  const previous = repo.getShotPlan(project.id);
+  const plan: ShotPlan = { projectId: project.id, shots, version: (previous?.version ?? 0) + 1, updatedAt: new Date().toISOString() };
   repo.saveShotPlan(plan);
+  await memory.recordShots(plan);
   events.emit(project.id, "director", "shots.planning.completed", `${shots.length} shots planned across ${screenplay.scenes.length} scenes`, {}, "success");
   return plan;
 }

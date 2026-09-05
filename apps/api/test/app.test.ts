@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { EventBus, InMemoryDocumentStore, LocalPartnerAdapter, PlaceholderMediaProvider, Repository, createDemoFixtureProvider, type AgentContext } from "@cinememory/core";
+import { EventBus, InMemoryDocumentStore, InstrumentedLLMProvider, LocalPartnerAdapter, LocalProductionMemory, PlaceholderMediaProvider, Repository, createDemoFixtureProvider, type AgentContext } from "@cinememory/core";
 import { createApp } from "../src/app.js";
 import { JobRunner } from "../src/jobs.js";
 import type { RuntimeInfo } from "../src/context.js";
@@ -11,15 +11,19 @@ function makeApp() {
   const store = new InMemoryDocumentStore();
   const repo = new Repository(store);
   const partner = new LocalPartnerAdapter(store);
+  const memory = new LocalProductionMemory(repo);
+  const events = new EventBus(repo, partner);
+  events.attachMemory(memory);
   const ctx: AgentContext = {
     repo,
-    llm: createDemoFixtureProvider(),
+    llm: new InstrumentedLLMProvider(createDemoFixtureProvider(), memory, events),
     media: new PlaceholderMediaProvider(),
     partner,
-    events: new EventBus(repo, partner),
+    memory,
+    events,
     config: { repairMaxAttempts: 2, enableVideoGeneration: false, mediaDir: mkdtempSync(join(tmpdir(), "cm-api-")) },
   };
-  const info: RuntimeInfo = { llm: { name: "fixture", model: "fixture", fixtureMode: true, supportsVision: false }, media: { name: "placeholder", capabilities: { image: true, video: false, speech: false } }, partner: "local", dataDir: "/tmp", videoEnabled: false, warnings: [] };
+  const info: RuntimeInfo = { llm: { name: "fixture", model: "fixture", fixtureMode: true, supportsVision: false }, media: { name: "placeholder", capabilities: { image: true, video: false, speech: false } }, partner: "local", memory: { name: "local", persistent: false }, dataDir: "/tmp", videoEnabled: false, warnings: [] };
   const jobs = new JobRunner(ctx);
   return { app: createApp(ctx, info, jobs), ctx, jobs };
 }

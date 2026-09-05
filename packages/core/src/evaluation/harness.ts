@@ -4,7 +4,7 @@ import { runDirector } from "../agents/director.js";
 import { repairAll } from "../agents/repair.js";
 import { runScreenplay } from "../agents/screenplay.js";
 import { runSourceIntelligence } from "../agents/sourceIntelligence.js";
-import { foldScreenplay } from "../memory/worldMemory.js";
+import { persistWorldMemory } from "../workflow/memoryStage.js";
 import type { EvalComparison, EvalMetrics, EvalRunRecord, EvalVariant, Project } from "../model/index.js";
 import { runVerification } from "../workflow/verification.js";
 import { newId } from "../util/hash.js";
@@ -42,15 +42,15 @@ async function runVariant(ctx: AgentContext, source: Project, variant: EvalVaria
   const project: Project = { ...source, id, title: `${source.title} [eval: ${variant}]`, isDemo: false, stage: "created", stages: [], createdAt: startedAt, updatedAt: startedAt };
   ctx.repo.saveProject(project);
   ctx.events.emit(source.id, "evaluation", "evaluation.variant.started", `Evaluation variant "${variant}" started (project ${id})`, { variant, evalProjectId: id });
+  (ctx.llm as { setProject?: (id: string) => void }).setProject?.(id);
 
   // Both variants share the same source understanding; the comparison is about what happens after.
   const world0 = ctx.repo.getWorld(source.id) ?? (await runSourceIntelligence(ctx, project));
   ctx.repo.saveWorld({ ...world0, projectId: id, version: 0 });
+  await ctx.memory.recordWorld({ ...world0, projectId: id, version: 0 });
   const plan = await runAdaptation(ctx, project, ctx.repo.getWorld(id)!);
   const screenplay = await runScreenplay(ctx, project, ctx.repo.getWorld(id)!, plan, { baseline: variant === "baseline" });
-  const folded = foldScreenplay(ctx.repo.getWorld(id)!, screenplay);
-  ctx.repo.saveWorld(folded.world);
-  ctx.repo.replaceStateChanges(id, folded.changes);
+  const folded = await persistWorldMemory(ctx, id, ctx.repo.getWorld(id)!, screenplay);
   await runDirector(ctx, project, ctx.repo.getWorld(id)!, screenplay, folded.changes, { injectMemory: variant === "cinememory", visualStyle: project.brief.visualStyle });
 
   if (variant === "baseline") {
@@ -90,8 +90,10 @@ export async function runEvaluation(ctx: AgentContext, projectId: string): Promi
   ctx.events.emit(projectId, "evaluation", "evaluation.started", "Baseline vs CineMemory evaluation started", {});
   const baseline = await runVariant(ctx, source, "baseline");
   const cinememory = await runVariant(ctx, source, "cinememory");
+  (ctx.llm as { setProject?: (id: string) => void }).setProject?.(projectId);
   const comparison: EvalComparison = { id: newId("cmp"), projectId, baseline, cinememory, createdAt: new Date().toISOString() };
   ctx.repo.saveEvaluation(comparison);
+  await ctx.memory.recordEvaluation(comparison).catch(() => undefined);
   ctx.events.emit(projectId, "evaluation", "evaluation.completed", `Evaluation complete: baseline ${baseline.metrics.violationsUnresolved} unresolved vs CineMemory ${cinememory.metrics.violationsUnresolved} unresolved`, { comparisonId: comparison.id }, "success");
   await ctx.partner.emitMetric({ name: "eval_unresolved_violations", value: cinememory.metrics.violationsUnresolved, labels: { projectId, variant: "cinememory" }, ts: new Date().toISOString() });
   await ctx.partner.emitMetric({ name: "eval_unresolved_violations", value: baseline.metrics.violationsUnresolved, labels: { projectId, variant: "baseline" }, ts: new Date().toISOString() });

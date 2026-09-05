@@ -332,6 +332,7 @@ export async function runSourceIntelligence(ctx: AgentContext, project: Project)
   });
   const { world, report } = normalizeSourceAnalysis(project, result.data);
   repo.saveWorld(world);
+  await ctx.memory.recordWorld(world);
   // Keep the raw model output next to the world for provenance/inspection.
   repo.store.put("source_analysis_raw", project.id, "current", { output: result.data, provenance: result.provenance, report });
   const constraintCount = world.sourceConstraints.length + world.visualConstraints.length + world.continuityConstraints.length;

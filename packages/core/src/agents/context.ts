@@ -1,5 +1,6 @@
 import type { LLMProvider } from "../llm/provider.js";
 import type { MediaGenerationProvider } from "../media/provider.js";
+import type { ProductionMemory } from "../memory/productionMemory.js";
 import type { AgentName, WorkflowEvent } from "../model/index.js";
 import type { PartnerAdapter } from "../partner/adapter.js";
 import type { Repository } from "../persistence/repository.js";
@@ -27,10 +28,16 @@ export type EventListener = (event: WorkflowEvent) => void;
  */
 export class EventBus {
   private listeners = new Set<EventListener>();
+  private memory?: ProductionMemory;
   constructor(
     private repo: Repository,
     private partner?: PartnerAdapter,
   ) {}
+
+  /** Production memory receives every event too (ClickHouse `events` table). */
+  attachMemory(memory: ProductionMemory) {
+    this.memory = memory;
+  }
 
   subscribe(fn: EventListener): () => void {
     this.listeners.add(fn);
@@ -56,6 +63,8 @@ export class EventBus {
       data,
     });
     void this.partner?.storeEvent(event).catch(() => undefined);
+    // When the partner adapter IS the memory (ClickHouse), avoid a duplicate insert.
+    if (this.memory && (this.memory as unknown) !== (this.partner as unknown)) void this.memory.recordEvent(event).catch(() => undefined);
     for (const l of this.listeners) {
       try {
         l(event);
@@ -72,6 +81,11 @@ export interface AgentContext {
   llm: LLMProvider;
   media: MediaGenerationProvider;
   partner: PartnerAdapter;
+  /** Long-horizon production memory (ClickHouse in production, local in tests). */
+  memory: ProductionMemory;
   events: EventBus;
   config: CineMemoryConfig;
 }
+
+/** Human-readable label for retrieval events. */
+export const memoryLabel = (ctx: AgentContext) => (ctx.memory.name === "clickhouse" ? "ClickHouse" : "local memory");
