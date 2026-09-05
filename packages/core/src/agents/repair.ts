@@ -90,7 +90,7 @@ async function rewriteScene(ctx: AgentContext, project: Project, v: Violation, s
   const folded = foldScreenplay(world, updated);
   repo.saveWorld(folded.world);
   repo.replaceStateChanges(project.id, folded.changes);
-  const changedLines = scene.lines.filter((l, i) => rewritten.lines[i]?.text !== l.text).length;
+  const changedLines = Math.max(scene.lines.length, rewritten.lines.length) - scene.lines.filter((l, i) => rewritten.lines[i]?.text === l.text).length;
   events.emit(project.id, "repair", "repair.scene.rewritten", `Scene ${scene.number} rewritten (v${version}): ${changedLines} line${changedLines === 1 ? "" : "s"} changed`, { sceneId, violationId: v.id, version, provenance: res.provenance });
   events.emit(project.id, "world_memory", "memory.rebuilt", `World memory refolded: ${folded.changes.length} state changes`, { version: folded.world.version });
   // Shots derived from the old scene are stale; mark them for re-planning.

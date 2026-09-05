@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #07090f;
+  --color-ink-900: #0c1019;
+  --color-ink-850: #111726;
+  --color-ink-800: #161d2e;
+  --color-ink-700: #212a40;
+  --color-ink-600: #2f3a55;
+  --color-ink-400: #6b7794;
+  --color-ink-300: #9aa5bf;
+  --color-ink-200: #c7cee0;
+  --color-ink-100: #e9edf6;
+  --color-amber-glow: #f5b942;
+  --color-amber-soft: #ffd77a;
+  --color-teal-glow: #3fd0c9;
+  --color-rose-glow: #ff6b8b;
+  --color-violet-glow: #a78bfa;
+  --color-lime-glow: #9be15d;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html, body { background: var(--color-ink-950); color: var(--color-ink-100); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+::selection { background: rgba(245, 185, 66, 0.35); }
+
+@utility card { @apply rounded-xl border border-ink-700/70 bg-ink-850/80 backdrop-blur; }
+@utility card-hover { @apply transition hover:border-ink-600 hover:bg-ink-800/90; }
+@utility btn { @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50; }
+@utility btn-primary { @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 bg-amber-glow text-ink-950 hover:bg-amber-soft; }
+@utility btn-ghost { @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 border border-ink-600 text-ink-200 hover:border-ink-400 hover:bg-ink-800; }
+@utility btn-danger { @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 border border-rose-glow/50 text-rose-glow hover:bg-rose-glow/10; }
+@utility label { @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400; }
+@utility input { @apply w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-amber-glow/60; }
+@utility pill { @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide; }
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-ink-600); border-radius: 8px; }
+.react-flow__attribution { display: none; }
+@keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,185,66,0.35);} 50% { box-shadow: 0 0 0 6px rgba(245,185,66,0);} }
+.pulse-glow { animation: pulse-glow 1.6s ease-in-out infinite; }
