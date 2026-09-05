@@ -9,7 +9,8 @@ Live checklist for the build. Updated at the end of every phase.
 | ClickHouse production memory (`@clickhouse/client`) | **executed** against a real ClickHouse engine (chdb 26.7 behind `deploy/local-clickhouse/server.py`) | `packages/core/test/clickhouse.test.ts` passes: full pipeline recorded, scene-scoped retrieval from SQL, 14 tables populated; API `/api/projects/:id/memory` |
 | Official ClickHouse MCP server (`mcp-clickhouse`) | **executed** (list_databases / list_tables / run_query against the same engine) | attached to the ADK Producer as `MCPToolset` when `CLICKHOUSE_URL` is set |
 | Google ADK Producer agent (`@google/adk` LlmAgent + FunctionTools) | **constructed and tool-tested** (tools drive the real pipeline, retrieval and repair); the LLM turn itself needs a Gemini key | `apps/agent/test/tools.test.ts`; API `/api/agent/chat` returns a clear 503 without a key |
-| Gemini text / vision / image / TTS / Veo (`@google/genai`) | **implemented, not yet executed**: no `GEMINI_API_KEY` was available in the build environment | `pnpm gemini:smoke` verifies each path and reports exactly which service/model fails |
+| Gemini text (structured JSON), continuity reasoning, vision, TTS (`@google/genai`) | **executed** on a live key: smoke test 4/5, full demo pipeline to `narrative_verified`, baseline-vs-CineMemory evaluation (see DEMO.md) | model pool with quota/overload failover; every call in ClickHouse `agent_actions` |
+| Gemini image models, Veo | **blocked by billing**: every image model returns quota 0 on the free tier; Veo not attempted | needs a billing-enabled project |
 | Development fixtures + placeholder media | used only when no key is configured; every artifact is stamped `fixture` / `placeholder` and the UI shows a banner | `packages/core/src/demo/fixtures.ts`, `media/placeholder.ts` |
 
 ## Done
@@ -30,7 +31,7 @@ Live checklist for the build. Updated at the end of every phase.
 
 ## Needs credentials / accounts (cannot be finished from inside the build sandbox)
 
-- [ ] `GEMINI_API_KEY` (AI Studio) or Vertex ADC → run `pnpm gemini:smoke`, then the live demo end to end (real screenplay, real keyframes, vision inspection, TTS; Veo with `--video`)
+- [ ] Billing on the Gemini key's Google Cloud project → image quota (keyframes, real-frame vision inspection), Veo, and more than 20 requests/day/model
 - [ ] ClickHouse Cloud service → set `CLICKHOUSE_URL/USER/PASSWORD`; schema is created on first use
 - [ ] Google Cloud project for Cloud Run (API + web) and optional Vertex AI Agent Engine deployment of the Producer
 - [ ] Public hosted URL (Cloud Run) and public GitHub repository visibility

@@ -145,7 +145,10 @@ export async function repairViolation(ctx: AgentContext, project: Project, viola
   while (true) {
     v = repo.getViolation(project.id, violationId)!;
     const attemptNo = v.repairAttempts.length + 1;
-    if (attemptNo > config.repairMaxAttempts) {
+    // Attempts after the last successful repair count against the budget (a regression gets a fresh budget once).
+    const lastResolved = v.repairAttempts.map((a) => a.outcome).lastIndexOf("resolved");
+    const sinceResolved = v.repairAttempts.length - (lastResolved + 1);
+    if (sinceResolved >= config.repairMaxAttempts) {
       const escalated: Violation = { ...v, status: "escalated", resolutionNote: `Unresolved after ${config.repairMaxAttempts} repair attempt${config.repairMaxAttempts === 1 ? "" : "s"}; needs manual review` };
       repo.saveViolation(escalated);
       await ctx.memory.recordViolations([escalated]).catch(() => undefined);
@@ -221,23 +224,35 @@ export interface RepairAllResult {
   escalated: string[];
 }
 
-/** Repair every open violation for the given critics, most severe first. Bounded by the per-violation attempt limit. */
-export async function repairAll(ctx: AgentContext, project: Project, critics: Array<Violation["critic"]>): Promise<RepairAllResult> {
+/**
+ * Repair every open violation for the given critics, most severe first. Bounded by the per-violation
+ * attempt limit and by `maxPasses`: a second pass only runs when the first pass resolved something and
+ * a repair regressed another violation (e.g. two rewrites of the same scene), so the loop always ends.
+ */
+export async function repairAll(ctx: AgentContext, project: Project, critics: Array<Violation["critic"]>, maxPasses = 2): Promise<RepairAllResult> {
   const order = { critical: 0, high: 1, medium: 2, low: 3 };
   const out: RepairAllResult = { attempted: [], resolved: [], escalated: [] };
-  const seen = new Set<string>();
-  // Re-read after every repair: fixing one violation can resolve (or create) others.
-  for (let guard = 0; guard < 50; guard++) {
-    const next = ctx.repo
-      .listViolations(project.id)
-      .filter((v) => critics.includes(v.critic) && v.status === "open" && !seen.has(v.id))
-      .sort((a, b) => order[a.severity] - order[b.severity] || (a.scope.sceneNumber ?? 0) - (b.scope.sceneNumber ?? 0))[0];
-    if (!next) break;
-    seen.add(next.id);
-    out.attempted.push(next.id);
-    const result = await repairViolation(ctx, project, next.id);
-    if (result.status === "resolved") out.resolved.push(next.id);
-    else if (result.status === "escalated") out.escalated.push(next.id);
+  for (let pass = 1; pass <= maxPasses; pass++) {
+    const seen = new Set<string>();
+    let resolvedThisPass = 0;
+    // Re-read after every repair: fixing one violation can resolve (or create) others.
+    for (let guard = 0; guard < 50; guard++) {
+      const next = ctx.repo
+        .listViolations(project.id)
+        .filter((v) => critics.includes(v.critic) && v.status === "open" && !seen.has(v.id))
+        .sort((a, b) => order[a.severity] - order[b.severity] || (a.scope.sceneNumber ?? 0) - (b.scope.sceneNumber ?? 0))[0];
+      if (!next) break;
+      seen.add(next.id);
+      out.attempted.push(next.id);
+      const result = await repairViolation(ctx, project, next.id);
+      if (result.status === "resolved") {
+        out.resolved.push(next.id);
+        resolvedThisPass += 1;
+      } else if (result.status === "escalated") out.escalated.push(next.id);
+    }
+    const regressed = ctx.repo.listViolations(project.id).filter((v) => critics.includes(v.critic) && v.status === "open").length;
+    if (resolvedThisPass === 0 || regressed === 0) break;
+    ctx.events.emit(project.id, "repair", "repair.regression", `${regressed} violation${regressed === 1 ? "" : "s"} reopened by other repairs; running pass ${pass + 1} of ${maxPasses}`, { pass: pass + 1, regressed }, "warn");
   }
   return out;
 }

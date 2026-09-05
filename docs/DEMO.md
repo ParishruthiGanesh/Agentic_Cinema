@@ -44,6 +44,23 @@ Then to `film_assembled`: keyframes (placeholder cards without a media key, Gemi
 
 In fixture mode both variants start from the same authored screenplay, so the difference measures prompt composition from memory, the critics and the repair loop. With live Gemini the baseline screenplay is generated from the source text and beat sheet alone, without the knowledge timeline or constraints.
 
+## Live Gemini run (measured, 2026-09-05)
+
+Same project, live `gemini-3.6-flash` → `3.7` → `3.8` → `3.5` → `3-flash-preview` pool on a free-tier key (20 requests/day/model, failovers logged), ClickHouse memory (local engine). Image models had no quota, so visual checks are prompt-level only.
+
+| Metric | Baseline | CineMemory |
+|---|---|---|
+| Constraints evaluated | 94 | 80 |
+| Checks evaluated / not evaluated | 200 / 113 | 178 / 106 |
+| Violations detected | 55 (53 `PROMPT_MISSING_CONSTRAINT`, 1 `REQUIRED_FACT_MISSING`, 1 `SOURCE_CONTRADICTION`) | 2 |
+| Violations repaired | 0 | 1 |
+| Unresolved | 55 | 1 (a second rewrite of Scene 6 regressed the fact the first repair added; the regression is now retried in a bounded second pass) |
+| Visual (prompt-level) pass rate | 64% | 100% |
+| Narrative pass rate | 100% | 100% |
+| Source pass rate | 87% | 93% |
+
+The live run of the main project itself (`pnpm demo:seed`) produced a 6-scene screenplay in which Lumi learns the secret in Scene 4 and Milo in Scene 5, detected one `SOURCE_CONTRADICTION`, repaired it with a Gemini scene rewrite, refolded memory to v2 and re-verified; 19 model calls are recorded in ClickHouse `agent_actions`.
+
 ## ClickHouse in the demo
 
 With `CLICKHOUSE_URL` set, the same run writes ~600 rows across 14 tables for this production. The Memory page shows the tables, the SQL each agent ran, and the knowledge timeline (`lumi @ scene 3`, `milo @ scene 5`). Selecting "before scene 4" in the retrieval explorer shows exactly the rows the Narrative Critic used to flag Milo's line, and the violation history for Scene 4 (`KNOWLEDGE_TIMELINE_VIOLATION · resolved · 1 repair attempt`).
