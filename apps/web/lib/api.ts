@@ -53,11 +53,48 @@ export interface ProjectSummary {
   lastEvent?: WorkflowEvent;
 }
 
+export interface MemoryTrace {
+  source: "clickhouse" | "local";
+  sql?: string;
+  rows: number;
+  latencyMs: number;
+}
+
+export interface ProjectMemory {
+  name: string;
+  persistent: boolean;
+  stats: Array<{ table: string; rows: number }>;
+  trace: MemoryTrace;
+  analytics: {
+    eventsByAgent: Array<{ agent: string; count: number }>;
+    violationsByCode: Array<{ code: string; status: string; count: number }>;
+    repairOutcomes: Array<{ outcome: string; count: number }>;
+    llmUsage: Array<{ provider: string; model: string; calls: number; avgMs: number; inputTokens: number; outputTokens: number; failures: number }>;
+    knowledgeTimeline: Array<{ factId: string; characterId: string; sceneNumber: number; via: string }>;
+  } | null;
+  agentActions: Array<{ actionId: string; task: string; provider: string; model?: string; latencyMs: number; inputTokens?: number; outputTokens?: number; ok: boolean; error?: string; createdAt: string }>;
+  retrievals: WorkflowEvent[];
+}
+
+export interface SceneMemory {
+  sceneNumber: number;
+  state: { changes: StateChange[]; trace: MemoryTrace };
+  knowledge: { events: Array<{ factId: string; statement: string; characterId: string; sceneId: string; sceneNumber: number; via?: string }>; trace: MemoryTrace };
+  history: { violations: Array<{ violationId: string; code: string; status: string; repairAttempts: number }>; trace: MemoryTrace };
+  context: SceneContext | null;
+}
+
+export type ProducerStep =
+  | { type: "text"; author: string; text: string; final: boolean }
+  | { type: "tool_call"; author: string; name: string; args: unknown }
+  | { type: "tool_result"; author: string; name: string; result: unknown };
+
 export interface Health {
   ok: boolean;
   llm: { name: string; model: string; fixtureMode: boolean; supportsVision: boolean };
   media: { name: string; capabilities: { image: boolean; video: boolean; speech: boolean } };
   partner: string;
+  memory: { name: string; persistent: boolean; url?: string; database?: string };
   dataDir: string;
   videoEnabled: boolean;
   warnings: string[];
@@ -105,6 +142,11 @@ export const api = {
   film: (id: string) => request<FilmManifest | null>(`/api/projects/${id}/film`),
   evaluations: (id: string) => request<EvalComparison[]>(`/api/projects/${id}/evaluations`),
   graph: (id: string, focus?: string, depth = 1) => request<CineGraph>(`/api/projects/${id}/graph${focus ? `?focus=${encodeURIComponent(focus)}&depth=${depth}` : ""}`),
+  agentStatus: () => request<{ available: boolean; reason?: string; model?: string; provider?: string; framework?: string; mcp?: string | null; memory?: string }>("/api/agent/status"),
+  agentChat: (sessionId: string, message: string) => request<{ sessionId: string; steps: ProducerStep[] }>("/api/agent/chat", { method: "POST", body: JSON.stringify({ sessionId, message }) }),
+  memory: (id: string) => request<ProjectMemory>(`/api/projects/${id}/memory`),
+  memoryScene: (id: string, n: number) => request<SceneMemory>(`/api/projects/${id}/memory/scene/${n}`),
+  memoryStatus: () => request<{ name: string; persistent: boolean; url?: string; database?: string; health: { ok: boolean; detail?: string }; tables: Array<{ table: string; rows: number }> }>("/api/memory/status"),
   references: (id: string) => request<Array<{ characterId: string; path: string; mimeType: string; prompt: string; provenance: { provider: string; model?: string; note?: string } }>>(`/api/projects/${id}/references`),
   sceneContext: (id: string, sceneId: string) => request<SceneContext | null>(`/api/projects/${id}/scenes/${sceneId}/context`),
   repair: (id: string, vid: string) => request<Job>(`/api/projects/${id}/violations/${vid}/repair`, { method: "POST" }),

@@ -28,6 +28,7 @@ import {
 import type { RuntimeInfo } from "./context.js";
 import { JobBusyError, JobRunner } from "./jobs.js";
 import { openApiDocument } from "./openapi.js";
+import type { ProducerService } from "./producer.js";
 
 const MIME: Record<string, string> = { ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".vtt": "text/vtt" };
 
@@ -62,7 +63,7 @@ export function projectSummary(ctx: AgentContext, project: Project) {
   };
 }
 
-export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner) {
+export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner, producer?: ProducerService) {
   const app = new Hono();
   app.use("*", cors());
 
@@ -227,6 +228,16 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner)
     const project = getProject(c.req.param("id"));
     const job = jobs.start(project.id, "evaluate", "baseline vs CineMemory", () => runEvaluation(ctx, project.id).then(() => undefined));
     return c.json(job, 202);
+  });
+
+  /* ---- ADK Producer agent ---- */
+  app.get("/api/agent/status", (c) => c.json(producer ? producer.status() : { available: false, reason: "Producer agent not mounted" }));
+  app.post("/api/agent/chat", async (c) => {
+    if (!producer) return c.json({ error: "Producer agent not mounted" }, 503);
+    if (!producer.available) return c.json({ error: producer.reason }, 503);
+    const body = z.object({ sessionId: z.string().min(1).max(80).default("web"), message: z.string().min(1).max(4000) }).parse(await c.req.json());
+    const steps = await producer.chat(body.sessionId, body.message);
+    return c.json({ sessionId: body.sessionId, steps });
   });
 
   /* ---- production memory (ClickHouse) ---- */

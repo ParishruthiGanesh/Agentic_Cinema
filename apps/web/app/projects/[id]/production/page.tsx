@@ -2,6 +2,7 @@
 
 import { useProject } from "@/components/ProjectProvider";
 import { RunControls } from "@/components/RunControls";
+import { ProducerPanel } from "@/components/ProducerPanel";
 import { ActivityLog } from "@/components/ActivityLog";
 import { PageTitle, Pill, Section } from "@/components/ui";
 import { STAGES } from "@/lib/format";
@@ -19,13 +20,16 @@ const STAGE_AGENTS: Record<string, string> = {
 };
 
 export default function ProductionPage() {
-  const { summary, live } = useProject();
+  const { id, summary, live } = useProject();
   const p = summary.data?.project;
   if (!p) return null;
   return (
     <div>
       <PageTitle title="Production" subtitle="Run, resume or reset the agent pipeline. Every stage persists its output, so runs can resume after a crash and re-runs of earlier stages invalidate everything downstream." />
       <RunControls />
+      <div className="mt-4">
+        <ProducerPanel projectId={id} />
+      </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[360px_1fr]">
         <Section title="Stages">
           <ol className="space-y-2">

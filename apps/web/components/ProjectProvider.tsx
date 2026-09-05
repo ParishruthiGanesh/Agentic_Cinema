@@ -31,6 +31,7 @@ const NAV = [
   { href: "/storyboard", label: "Storyboard" },
   { href: "/production", label: "Production" },
   { href: "/continuity", label: "Continuity" },
+  { href: "/memory", label: "Memory" },
   { href: "/film", label: "Final Film" },
   { href: "/evaluation", label: "Evaluation" },
 ];

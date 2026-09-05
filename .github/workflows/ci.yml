@@ -17,11 +17,21 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @cinememory/core build
+      - run: pnpm --filter @cinememory/core build && pnpm --filter @cinememory/agent build
       - run: pnpm -r typecheck
+      # Real ClickHouse engine for the integration test (chdb behind the local HTTP shim).
+      - run: pip install chdb
+      - run: nohup python3 deploy/local-clickhouse/server.py --port 8123 --data /tmp/ch > /tmp/ch.log 2>&1 &
+      - run: sleep 3 && curl -sf http://127.0.0.1:8123/ping
       - run: pnpm --filter @cinememory/core test
+        env:
+          CLICKHOUSE_URL: http://127.0.0.1:8123
       - run: pnpm --filter @cinememory/api test
+      - run: pnpm --filter @cinememory/agent test
       - run: pnpm --filter @cinememory/web build
         env:
           NEXT_TELEMETRY_DISABLED: "1"

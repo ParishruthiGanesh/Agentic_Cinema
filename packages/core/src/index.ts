@@ -27,3 +27,4 @@ export * from "./evaluation/harness.js";
 export * from "./demo/index.js";
 export * from "./util/hash.js";
 export * from "./util/text.js";
+export * from "./runtime/buildContext.js";

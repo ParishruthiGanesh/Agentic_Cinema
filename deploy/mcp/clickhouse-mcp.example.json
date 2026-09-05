@@ -1,0 +1,16 @@
+{
+  "_comment": "Official ClickHouse MCP server (pip install mcp-clickhouse). Point it at the same ClickHouse that CineMemory writes production memory to. Used by the CineMemory Producer agent (ADK McpToolset) and by any MCP client (Claude Desktop, Gemini CLI, Cursor) to query production memory in SQL.",
+  "mcpServers": {
+    "clickhouse": {
+      "command": "mcp-clickhouse",
+      "env": {
+        "CLICKHOUSE_HOST": "127.0.0.1",
+        "CLICKHOUSE_PORT": "8123",
+        "CLICKHOUSE_USER": "default",
+        "CLICKHOUSE_PASSWORD": "",
+        "CLICKHOUSE_SECURE": "false",
+        "CLICKHOUSE_VERIFY": "false"
+      }
+    }
+  }
+}

@@ -17,10 +17,11 @@ export function RuntimeBanner() {
   if (!h) return null;
   const fixture = h.llm.fixtureMode;
   const placeholder = h.media.name === "placeholder";
+  const memoryLabel = h.memory?.name === "clickhouse" ? `memory ClickHouse (${h.memory.database})` : "memory local (no ClickHouse)";
   if (!fixture && !placeholder) {
     return (
       <div className="border-t border-ink-800 bg-ink-900/60 px-5 py-1 text-[11px] text-ink-400">
-        Live: Gemini {h.llm.model} · media {h.media.name}{h.videoEnabled ? " (video on)" : " (keyframes + voice; Veo off)"} · partner adapter {h.partner}
+        Live: Gemini {h.llm.model} · media {h.media.name}{h.videoEnabled ? " (video on)" : " (keyframes + voice; Veo off)"} · {memoryLabel}
       </div>
     );
   }
@@ -29,7 +30,7 @@ export function RuntimeBanner() {
       <strong>Development mode.</strong>{" "}
       {fixture && <>LLM agents replay authored fixtures for the bundled demo project (no Gemini key configured). </>}
       {placeholder && <>Keyframes are labelled placeholder cards, not model output. </>}
-      Set <code className="font-mono">GEMINI_API_KEY</code> in <code className="font-mono">.env</code> for live agents and media.
+      Set <code className="font-mono">GEMINI_API_KEY</code> in <code className="font-mono">.env</code> for live agents and media. · {memoryLabel}
     </div>
   );
 }

@@ -6,6 +6,26 @@ import { RunControls } from "@/components/RunControls";
 import { ActivityLog } from "@/components/ActivityLog";
 import { PageTitle, Section, Stat } from "@/components/ui";
 import { STAGES, pct, secs, stageIndex } from "@/lib/format";
+import { api } from "@/lib/api";
+import { useResource } from "@/lib/hooks";
+
+function MemoryPanel({ id, tick }: { id: string; tick: number }) {
+  const mem = useResource(() => api.memory(id), [id, tick]);
+  const m = mem.data;
+  if (!m) return null;
+  const isCH = m.name === "clickhouse";
+  const total = m.stats.reduce((s, t) => s + t.rows, 0);
+  return (
+    <Section title={<span>Production memory · <span className={isCH ? "text-amber-glow" : "text-ink-400"}>{isCH ? "ClickHouse" : "local (ClickHouse not configured)"}</span></span>} aside={<Link href={`/projects/${id}/memory`} className="text-xs text-amber-glow hover:underline">Open memory →</Link>}>
+      <div className="grid grid-cols-2 gap-2 text-center md:grid-cols-6">
+        {[["rows stored", total], ...m.stats.filter((t) => ["state_changes", "knowledge_events", "violations", "agent_actions", "repair_attempts"].includes(t.table)).map((t) => [t.table.replace("_", " "), t.rows])].map(([k, v]) => (
+          <div key={k as string} className="rounded-md bg-ink-900/70 py-2"><div className="text-lg font-semibold tabular-nums">{(v as number).toLocaleString()}</div><div className="text-[10px] uppercase tracking-wide text-ink-400">{k as string}</div></div>
+        ))}
+      </div>
+      <div className="mt-2 text-xs text-ink-400">{m.retrievals.length ? `Last retrieval: ${m.retrievals[0].message}` : "Agents retrieve scene-scoped history from here instead of re-reading the whole film."}</div>
+    </Section>
+  );
+}
 
 export default function ProjectDashboard() {
   const { id, summary, live } = useProject();
@@ -93,6 +113,9 @@ export default function ProjectDashboard() {
         </Section>
       </div>
 
+      <div className="mt-4">
+        <MemoryPanel id={id} tick={live.tick} />
+      </div>
       <div className="mt-4">
         <Section title="Agent activity" aside={<span className="text-xs text-ink-400">{live.connected ? "live" : "polling"} · {live.events.length} events</span>}>
           <ActivityLog events={live.events} height="h-[360px]" />
