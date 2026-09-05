@@ -8,6 +8,8 @@ import { EventBus } from "../src/agents/context.js";
 import { keywordsFromFact } from "../src/agents/sourceIntelligence.js";
 import { containsPhrase } from "../src/util/text.js";
 import { SourceAnalysisOutput } from "../src/agents/sourceIntelligence.js";
+import { screenplaySchemaFor } from "../src/agents/screenplay.js";
+import { demoArtifacts } from "./helpers.js";
 
 describe("Gemini JSON schema conversion", () => {
   it("strips unsupported keywords and keeps structure", () => {
@@ -22,6 +24,9 @@ describe("Gemini JSON schema conversion", () => {
 
   it("converts the large agent schemas without throwing", () => {
     expect(() => toGeminiJsonSchema(SourceAnalysisOutput)).not.toThrow();
+    const { world } = demoArtifacts();
+    const refined = toGeminiJsonSchema(screenplaySchemaFor(world)) as { properties: Record<string, unknown> };
+    expect(Object.keys(refined.properties)).toEqual(["title", "logline", "acts", "scenes"]);
   });
 });
 

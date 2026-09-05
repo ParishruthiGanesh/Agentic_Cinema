@@ -13,6 +13,7 @@ import {
   createProject,
   ensureDemoProject,
   generateShotMedia,
+  listCharacterReferences,
   neighborhood,
   repairViolation,
   resetFromStage,
@@ -166,6 +167,7 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner)
   app.get("/api/projects/:id/continuity", (c) => c.json(continuitySummary(ctx, getProject(c.req.param("id")).id)));
   app.get("/api/projects/:id/film", (c) => c.json(ctx.repo.getFilm(getProject(c.req.param("id")).id) ?? null));
   app.get("/api/projects/:id/evaluations", (c) => c.json(ctx.repo.listEvaluations(getProject(c.req.param("id")).id)));
+  app.get("/api/projects/:id/references", (c) => c.json(listCharacterReferences(ctx, getProject(c.req.param("id")).id)));
   app.get("/api/projects/:id/source-analysis", (c) => c.json(ctx.repo.store.get("source_analysis_raw", getProject(c.req.param("id")).id, "current") ?? null));
 
   app.get("/api/projects/:id/scenes/:sceneId/context", (c) => {

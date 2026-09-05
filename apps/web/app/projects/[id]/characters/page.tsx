@@ -1,14 +1,15 @@
 "use client";
 
 import { useProject } from "@/components/ProjectProvider";
-import { Empty, PageTitle, Pill } from "@/components/ui";
-import { api } from "@/lib/api";
+import { Empty, PageTitle, Pill, Provenance } from "@/components/ui";
+import { api, mediaUrl } from "@/lib/api";
 import { useResource } from "@/lib/hooks";
 
 export default function CharactersPage() {
   const { id, live } = useProject();
   const world = useResource(() => api.world(id), [id, live.tick]);
   const screenplay = useResource(() => api.screenplay(id), [id, live.tick]);
+  const refs = useResource(() => api.references(id), [id, live.tick]);
   const w = world.data;
   if (world.loading) return <div className="text-sm text-ink-400">Loading…</div>;
   if (!w) return <Empty title="No characters yet" hint="Run source analysis to extract the character bible." />;
@@ -25,8 +26,16 @@ export default function CharactersPage() {
           const unknown = w.knowledgeFacts.filter((f) => !f.holders.some((h) => h.characterId === c.id));
           const rels = w.relationships.filter((r) => r.from === c.id || r.to === c.id);
           const initials = c.name.slice(0, 1).toUpperCase();
+          const ref = refs.data?.find((r) => r.characterId === c.id);
           return (
             <div key={c.id} className="card overflow-hidden">
+              {ref && (
+                <div className="relative aspect-square max-h-56 w-full overflow-hidden bg-ink-950">
+                  <img src={mediaUrl(ref.path)} alt={`${c.name} reference`} className="h-full w-full object-cover" />
+                  <div className="absolute bottom-2 left-2"><Provenance p={ref.provenance} /></div>
+                  <div className="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-ink-200">reference appearance</div>
+                </div>
+              )}
               <div className="flex items-center gap-3 border-b border-ink-700/60 bg-ink-900/60 px-4 py-3">
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-amber-glow to-rose-glow text-lg font-bold text-ink-950">{initials}</div>
                 <div className="min-w-0">

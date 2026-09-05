@@ -105,6 +105,7 @@ export const api = {
   film: (id: string) => request<FilmManifest | null>(`/api/projects/${id}/film`),
   evaluations: (id: string) => request<EvalComparison[]>(`/api/projects/${id}/evaluations`),
   graph: (id: string, focus?: string, depth = 1) => request<CineGraph>(`/api/projects/${id}/graph${focus ? `?focus=${encodeURIComponent(focus)}&depth=${depth}` : ""}`),
+  references: (id: string) => request<Array<{ characterId: string; path: string; mimeType: string; prompt: string; provenance: { provider: string; model?: string; note?: string } }>>(`/api/projects/${id}/references`),
   sceneContext: (id: string, sceneId: string) => request<SceneContext | null>(`/api/projects/${id}/scenes/${sceneId}/context`),
   repair: (id: string, vid: string) => request<Job>(`/api/projects/${id}/violations/${vid}/repair`, { method: "POST" }),
   override: (id: string, vid: string, note: string) => request<Violation>(`/api/projects/${id}/violations/${vid}/override`, { method: "POST", body: JSON.stringify({ note }) }),
