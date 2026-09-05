@@ -33,10 +33,11 @@ async function main() {
     }
   };
 
-  const textModel = env.GEMINI_TEXT_MODEL ?? "gemini-3.6-flash";
+  const pool = (env.GEMINI_TEXT_MODEL ?? "gemini-3.6-flash").split(",").map((m) => m.trim()).filter(Boolean);
+  const textModel = pool[0];
   let llm: GeminiLLMProvider | undefined;
   try {
-    llm = new GeminiLLMProvider({ apiKey: env.GEMINI_API_KEY, vertexai: vertex, project: env.GOOGLE_CLOUD_PROJECT, location: env.GOOGLE_CLOUD_LOCATION, model: textModel, maxRetries: 1 });
+    llm = new GeminiLLMProvider({ apiKey: env.GEMINI_API_KEY, vertexai: vertex, project: env.GOOGLE_CLOUD_PROJECT, location: env.GOOGLE_CLOUD_LOCATION, models: pool, maxRetries: 2, onFailover: (from, to, reason) => console.log(`  ↪ failover ${from} → ${to} (${reason})`) });
   } catch (e) {
     if (e instanceof LLMConfigError) console.error(e.message);
     process.exit(2);
