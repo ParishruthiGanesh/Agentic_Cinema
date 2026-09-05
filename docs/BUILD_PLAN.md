@@ -40,7 +40,7 @@ Everything after that (shots, media, film assembly, evaluation) builds on the sa
 | 10 | Storyboard + Continuity Command Center | UI | ✅ |
 | 11 | Final film assembly | browser sequencer + manifest, ffmpeg export when available | ✅ |
 | 12 | Baseline vs CineMemory evaluation | harness with real records | ✅ |
-| 13 | UX polish | | 🔄 |
-| 14 | Deployment, docs, tests, demo | | 🔄 |
+| 13 | UX polish | cinematic workspace, provenance badges, live activity log | ✅ |
+| 14 | Deployment, docs, tests, demo | Dockerfiles, CI, docs set, 34 tests, demo fixtures | ✅ (live Gemini calls unverified without credentials) |
 
 See `docs/STATUS.md` for the live checklist.
