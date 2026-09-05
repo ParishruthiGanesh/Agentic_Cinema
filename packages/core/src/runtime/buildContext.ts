@@ -58,6 +58,7 @@ export async function buildContext(): Promise<{ ctx: AgentContext; info: Runtime
   loadEnv();
   const env = process.env;
   const warnings: string[] = [];
+  const failovers: Array<{ from: string; to: string; reason: string }> = [];
   const dataDir = resolve(repoRoot(), env.CINEMEMORY_DATA_DIR ?? "./data");
   const config: CineMemoryConfig = {
     repairMaxAttempts: Number(env.REPAIR_MAX_ATTEMPTS ?? 2),
@@ -94,7 +95,9 @@ export async function buildContext(): Promise<{ ctx: AgentContext; info: Runtime
   let llm: LLMProvider;
   if (llmChoice === "gemini") {
     if (!hasGemini) throw new LLMConfigError("LLM_PROVIDER=gemini but no GEMINI_API_KEY (or Vertex project) configured");
-    llm = new GeminiLLMProvider({ apiKey: env.GEMINI_API_KEY, vertexai: vertex, project: env.GOOGLE_CLOUD_PROJECT, location: env.GOOGLE_CLOUD_LOCATION, model: env.GEMINI_TEXT_MODEL });
+    const pool = (env.GEMINI_TEXT_MODEL ?? "gemini-3.6-flash").split(",").map((m) => m.trim()).filter(Boolean);
+    llm = new GeminiLLMProvider({ apiKey: env.GEMINI_API_KEY, vertexai: vertex, project: env.GOOGLE_CLOUD_PROJECT, location: env.GOOGLE_CLOUD_LOCATION, models: pool, onFailover: (from, to, reason) => failovers.push({ from, to, reason }) });
+    if (pool.length > 1) warnings.push(`Gemini model pool: ${pool.join(" → ")} (fails over when a model's daily quota is exhausted; every artifact records the model that produced it)`);
   } else if (llmChoice === "fixture") {
     llm = createDemoFixtureProvider();
     warnings.push("LLM_PROVIDER=fixture: agents replay authored development fixtures for the bundled demo only. Set GEMINI_API_KEY for real Gemini agents.");
@@ -113,7 +116,7 @@ export async function buildContext(): Promise<{ ctx: AgentContext; info: Runtime
 
   const events = new EventBus(repo, partner);
   events.attachMemory(memory);
-  const instrumented = new InstrumentedLLMProvider(llm, memory, events);
+  const instrumented = new InstrumentedLLMProvider(llm, memory, events, () => failovers.splice(0));
   const ctx: AgentContext = { repo, llm: instrumented, media, partner, memory, events, config };
   const info: RuntimeInfo = {
     llm: { name: llm.name, model: llm.model, fixtureMode: llm instanceof FixtureLLMProvider, supportsVision: llm.supportsVision },

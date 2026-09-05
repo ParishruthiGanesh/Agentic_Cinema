@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { shortHash } from "../util/hash.js";
 import { toGeminiJsonSchema } from "./jsonSchema.js";
-import { LLMConfigError, LLMOutputError, type LLMProvider, type StructuredRequest, type StructuredResult } from "./provider.js";
+import { LLMConfigError, LLMOutputError, LLMQuotaError, type LLMProvider, type StructuredRequest, type StructuredResult } from "./provider.js";
 
 export interface GeminiProviderOptions {
   apiKey?: string;
@@ -9,7 +9,11 @@ export interface GeminiProviderOptions {
   project?: string;
   location?: string;
   model?: string;
+  /** Optional failover pool: when a model's daily quota is exhausted (HTTP 429 *PerDay* quota), the next model is used for the rest of the process. */
+  models?: string[];
   maxRetries?: number;
+  /** Called when a failover happens, so the workflow log can record it. */
+  onFailover?: (from: string, to: string, reason: string) => void;
 }
 
 /** Sleep helper for backoff. */
@@ -23,10 +27,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export class GeminiLLMProvider implements LLMProvider {
   readonly name = "gemini";
-  readonly model: string;
   readonly supportsVision = true;
   private ai: GoogleGenAI;
   private maxRetries: number;
+  private pool: string[];
+  private poolIndex = 0;
+  private onFailover?: GeminiProviderOptions["onFailover"];
+
+  /** The model currently in use (changes only after a quota failover). */
+  get model(): string {
+    return this.pool[this.poolIndex];
+  }
 
   constructor(opts: GeminiProviderOptions) {
     if (opts.vertexai) {
@@ -36,8 +47,21 @@ export class GeminiLLMProvider implements LLMProvider {
       if (!opts.apiKey) throw new LLMConfigError("GEMINI_API_KEY is not set");
       this.ai = new GoogleGenAI({ apiKey: opts.apiKey });
     }
-    this.model = opts.model ?? "gemini-3.6-flash";
-    this.maxRetries = opts.maxRetries ?? 3;
+    const pool = (opts.models ?? [opts.model ?? "gemini-3.6-flash"]).map((m) => m.trim()).filter(Boolean);
+    this.pool = pool.length ? pool : ["gemini-3.6-flash"];
+    this.maxRetries = opts.maxRetries ?? 4;
+    this.onFailover = opts.onFailover;
+  }
+
+  /** Daily free-tier quota exhaustion: not retryable on this model; fail over if a model is left. */
+  private failoverIfDailyQuota(err: unknown): boolean {
+    const msg = String((err as { message?: string })?.message ?? err);
+    if (!/429/.test(msg) || !/PerDay|per day|daily/i.test(msg)) return false;
+    if (this.poolIndex + 1 >= this.pool.length) return false;
+    const from = this.model;
+    this.poolIndex += 1;
+    this.onFailover?.(from, this.model, `daily quota exhausted for ${from}`);
+    return true;
   }
 
   async generateStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {
@@ -114,8 +138,25 @@ export class GeminiLLMProvider implements LLMProvider {
         };
       } catch (err) {
         lastErr = err;
-        if (!isRetryable(err) || attempt === this.maxRetries) throw err;
-        await sleep(delay);
+        if (this.failoverIfDailyQuota(err)) continue; // same attempt count, next model
+        if (isDailyQuota(err)) throw new LLMQuotaError(`Gemini daily quota exhausted for ${this.model} and no failover model left: ${String((err as Error).message).slice(0, 300)}`, this.model, retryAfter(err));
+        if (!isRetryable(err)) throw err;
+        if (attempt === this.maxRetries) {
+          // Persistent overload/unavailability on this model: try the next model in the pool once.
+          if (isOverloaded(err) && this.poolIndex + 1 < this.pool.length) {
+            const from = this.model;
+            this.poolIndex += 1;
+            this.onFailover?.(from, this.model, `${from} unavailable after ${this.maxRetries} retries`);
+            attempt = -1;
+            delay = 1500;
+            continue;
+          }
+          throw err;
+        }
+        // Per-minute rate limits: honour the server's retryDelay (capped) instead of a short fixed backoff.
+        const serverWait = retryAfter(err);
+        const wait = serverWait ? Math.min(serverWait * 1000 + 1000, 75_000) : delay;
+        await sleep(wait);
         delay *= 2;
       }
     }
@@ -127,6 +168,21 @@ function stripCodeFence(text: string): string {
   const t = text.trim();
   if (t.startsWith("```")) return t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
   return t;
+}
+
+function isDailyQuota(err: unknown): boolean {
+  const msg = String((err as { message?: string })?.message ?? err);
+  return /429/.test(msg) && /PerDay|per day|daily/i.test(msg);
+}
+
+function retryAfter(err: unknown): number | undefined {
+  const m = /retryDelay["']?\s*[:=]\s*["']?(\d+)s/.exec(String((err as { message?: string })?.message ?? err));
+  return m ? Number(m[1]) : undefined;
+}
+
+function isOverloaded(err: unknown): boolean {
+  const msg = String((err as { message?: string })?.message ?? err);
+  return /503|UNAVAILABLE|overloaded|high demand/i.test(msg);
 }
 
 function isRetryable(err: unknown): boolean {

@@ -39,6 +39,18 @@ export class LLMConfigError extends Error {
   }
 }
 
+/** Raised when the provider's quota/rate limit is exhausted and no failover model remains. Infrastructure, not a reasoning failure. */
+export class LLMQuotaError extends Error {
+  constructor(
+    message: string,
+    public readonly model: string,
+    public readonly retryAfterSec?: number,
+  ) {
+    super(message);
+    this.name = "LLMQuotaError";
+  }
+}
+
 export class LLMOutputError extends Error {
   constructor(
     message: string,

@@ -98,7 +98,7 @@ pnpm --filter @cinememory/core build && pnpm --filter @cinememory/agent build
 | `LLM_PROVIDER` | `gemini` (default when a key is present) or `fixture` (development replay for the bundled demo only). |
 | `GEMINI_TEXT_MODEL` | default `gemini-3.6-flash` |
 | `MEDIA_PROVIDER` | `gemini` or `placeholder` (labelled SVG storyboard cards, no video/audio). |
-| `GEMINI_IMAGE_MODEL`, `GEMINI_VIDEO_MODEL`, `GEMINI_TTS_MODEL` | defaults `gemini-2.5-flash-image`, `veo-3.0-fast-generate-001`, `gemini-2.5-flash-preview-tts`. An `imagen-*` image model switches to the Imagen API. |
+| `GEMINI_IMAGE_MODEL`, `GEMINI_VIDEO_MODEL`, `GEMINI_TTS_MODEL` | defaults `gemini-3.1-flash-image`, `veo-3.1-fast-generate-preview`, `gemini-2.5-flash-preview-tts`. An `imagen-*` image model switches to the Imagen API. |
 | `ENABLE_VIDEO_GENERATION` | `true` to call Veo (billable, slow). Keyframes and voice are generated regardless. |
 | `CINEMEMORY_DATA_DIR` | SQLite database + media directory (default `./data`). |
 | `REPAIR_MAX_ATTEMPTS` | Repair retries per violation before escalation (default 2). |

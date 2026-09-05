@@ -5,6 +5,7 @@ import { SCENE_REWRITE_SYSTEM, sceneRewritePrompt } from "./prompts/repair.js";
 import { retrieveSceneContext } from "../memory/worldMemory.js";
 import { Scene, type Project, type RepairAttempt, type Violation, type ViolationCode, type WorldState } from "../model/index.js";
 import { runVerification } from "../workflow/verification.js";
+import { LLMQuotaError } from "../llm/provider.js";
 import { generateShotMedia } from "../media/generation.js";
 
 type RootCause = RepairAttempt["rootCause"];
@@ -198,6 +199,12 @@ export async function repairViolation(ctx: AgentContext, project: Project, viola
       repo.saveViolation({ ...withAttempt, status: "repairing" });
       events.emit(project.id, "repair", "repair.attempt.failed", `Attempt ${attemptNo} did not resolve ${v.code}; ${attemptNo < config.repairMaxAttempts ? "retrying" : "limit reached"}`, { violationId: v.id, attempt: attemptNo }, "warn");
     } catch (err) {
+      if (err instanceof LLMQuotaError) {
+        // Infrastructure, not a failed repair: leave the violation open so the run can resume later.
+        repo.saveViolation({ ...repo.getViolation(project.id, violationId)!, status: "open" });
+        events.emit(project.id, "repair", "repair.paused", `Repair of ${v.code} paused: ${err.message}`, { violationId: v.id }, "error");
+        throw err;
+      }
       attempt.outcome = "error";
       attempt.detail = `${attempt.detail} error: ${(err as Error).message}`.trim();
       const cur = repo.getViolation(project.id, violationId)!;

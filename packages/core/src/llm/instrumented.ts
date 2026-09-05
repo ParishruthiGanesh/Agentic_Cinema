@@ -10,7 +10,6 @@ import type { LLMProvider, StructuredRequest, StructuredResult } from "./provide
  */
 export class InstrumentedLLMProvider implements LLMProvider {
   readonly name: string;
-  readonly model: string;
   readonly supportsVision: boolean;
   private projectId: string | undefined;
 
@@ -18,10 +17,22 @@ export class InstrumentedLLMProvider implements LLMProvider {
     private inner: LLMProvider,
     private memory: ProductionMemory,
     private events: EventBus,
+    /** Returns (and clears) failover notices recorded by the inner provider since the last call. */
+    private drainFailovers?: () => Array<{ from: string; to: string; reason: string }>,
   ) {
     this.name = inner.name;
-    this.model = inner.model;
     this.supportsVision = inner.supportsVision;
+  }
+
+  /** Reflects the inner provider's current model (it can change after a quota failover). */
+  get model(): string {
+    return this.inner.model;
+  }
+
+  private reportFailovers(projectId: string) {
+    for (const f of this.drainFailovers?.() ?? []) {
+      this.events.emit(projectId, "orchestrator", "agent.llm.failover", `Gemini model failover: ${f.from} → ${f.to} (${f.reason})`, f, "warn");
+    }
   }
 
   /** The orchestrator sets the active project so calls can be attributed. */
@@ -34,12 +45,14 @@ export class InstrumentedLLMProvider implements LLMProvider {
     const projectId = this.projectId ?? "unknown";
     try {
       const result = await this.inner.generateStructured(req);
+      this.reportFailovers(projectId);
       const p = result.provenance;
       const tokens = p.inputTokens !== undefined ? ` · ${p.inputTokens}→${p.outputTokens ?? 0} tokens` : "";
       this.events.emit(projectId, agentFor(req.task), "agent.llm.call", `${this.name === "gemini" ? "Gemini" : this.name} ${p.model ?? this.model} · ${req.task} · ${((p.latencyMs ?? Date.now() - started) / 1000).toFixed(1)}s${tokens}`, { task: req.task, provider: p.provider, model: p.model, latencyMs: p.latencyMs, inputTokens: p.inputTokens, outputTokens: p.outputTokens, promptHash: p.promptHash });
       await this.memory.recordAgentAction({ projectId, actionId: newId("act"), task: req.task, provider: p.provider, model: p.model, latencyMs: p.latencyMs ?? Date.now() - started, inputTokens: p.inputTokens, outputTokens: p.outputTokens, promptHash: p.promptHash, ok: true, createdAt: new Date().toISOString() }).catch(() => undefined);
       return result;
     } catch (err) {
+      this.reportFailovers(projectId);
       const message = (err as Error).message;
       this.events.emit(projectId, agentFor(req.task), "agent.llm.failed", `${this.name} call failed for ${req.task}: ${message}`, { task: req.task, provider: this.name, model: this.model }, "error");
       await this.memory.recordAgentAction({ projectId, actionId: newId("act"), task: req.task, provider: this.name, model: this.model, latencyMs: Date.now() - started, ok: false, error: message, createdAt: new Date().toISOString() }).catch(() => undefined);

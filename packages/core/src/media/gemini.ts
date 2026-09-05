@@ -47,8 +47,8 @@ export class GeminiMediaProvider implements MediaGenerationProvider {
       this.ai = new GoogleGenAI({ apiKey: opts.apiKey });
       this.apiKey = opts.apiKey;
     }
-    this.imageModel = opts.imageModel ?? "gemini-2.5-flash-image";
-    this.videoModel = opts.videoModel ?? "veo-3.0-fast-generate-001";
+    this.imageModel = opts.imageModel ?? "gemini-3.1-flash-image";
+    this.videoModel = opts.videoModel ?? "veo-3.1-fast-generate-preview";
     this.ttsModel = opts.ttsModel ?? "gemini-2.5-flash-preview-tts";
     this.pollIntervalMs = opts.pollIntervalMs ?? 10_000;
     this.videoTimeoutMs = opts.videoTimeoutMs ?? 6 * 60_000;
