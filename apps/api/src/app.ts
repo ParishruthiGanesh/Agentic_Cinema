@@ -25,6 +25,7 @@ import {
 } from "@cinememory/core";
 import type { RuntimeInfo } from "./context.js";
 import { JobBusyError, JobRunner } from "./jobs.js";
+import { openApiDocument } from "./openapi.js";
 
 const MIME: Record<string, string> = { ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".vtt": "text/vtt" };
 
@@ -75,6 +76,8 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner)
     if (!p) throw new NotFound(`Project ${id} not found`);
     return p;
   };
+
+  app.get("/api/openapi.json", (c) => c.json(openApiDocument(new URL(c.req.url).origin)));
 
   app.get("/api/health", async (c) => c.json({ ok: true, ...info, partnerHealth: await ctx.partner.healthCheck(), time: new Date().toISOString() }));
 

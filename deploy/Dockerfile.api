@@ -1,0 +1,32 @@
+# CineMemory API — Cloud Run friendly image.
+# Build from the repo root:  docker build -f deploy/Dockerfile.api -t cinememory-api .
+FROM node:22-slim AS build
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/core/package.json packages/core/
+COPY apps/api/package.json apps/api/
+RUN pnpm install --frozen-lockfile=false --filter @cinememory/core --filter @cinememory/api
+COPY packages/core packages/core
+COPY apps/api apps/api
+RUN pnpm --filter @cinememory/core build && pnpm --filter @cinememory/api build
+
+FROM node:22-slim
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+WORKDIR /app
+COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages/core/package.json packages/core/package.json
+COPY --from=build /app/packages/core/dist packages/core/dist
+COPY --from=build /app/packages/core/node_modules packages/core/node_modules
+COPY --from=build /app/apps/api/package.json apps/api/package.json
+COPY --from=build /app/apps/api/dist apps/api/dist
+COPY --from=build /app/apps/api/node_modules apps/api/node_modules
+ENV NODE_ENV=production
+ENV CINEMEMORY_DATA_DIR=/data
+# Cloud Run sets PORT; the API reads API_PORT.
+ENV API_PORT=8080
+EXPOSE 8080
+VOLUME ["/data"]
+WORKDIR /app/apps/api
+CMD ["node", "--no-warnings", "dist/server.js"]

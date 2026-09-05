@@ -91,18 +91,19 @@ export function toVtt(cues: FilmManifest["subtitles"]): string {
 }
 
 async function renderWithFfmpeg(ctx: AgentContext, project: Project, segments: FilmManifest["segments"]): Promise<FilmManifest["renderedVideo"]> {
+  const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
   const available = await new Promise<boolean>((resolve) => {
-    const p = spawn("ffmpeg", ["-version"]);
+    const p = spawn(ffmpeg, ["-version"]);
     p.on("error", () => resolve(false));
     p.on("exit", (code) => resolve(code === 0));
   });
-  if (!available) throw new Error("ffmpeg not installed");
+  if (!available) throw new Error(`ffmpeg not available (${ffmpeg}); set FFMPEG_PATH to render an MP4`);
   const dir = join(ctx.config.mediaDir, project.id);
   const listPath = join(dir, "concat.txt");
   await writeFile(listPath, segments.map((s) => `file '${join(ctx.config.mediaDir, s.video!.path).replace(/'/g, "'\\''")}'`).join("\n"));
   const outRel = `${project.id}/film.mp4`;
   await new Promise<void>((resolve, reject) => {
-    const p = spawn("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", join(ctx.config.mediaDir, outRel)]);
+    const p = spawn(ffmpeg, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", join(ctx.config.mediaDir, outRel)]);
     let err = "";
     p.stderr.on("data", (d) => (err += d.toString()));
     p.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(err.slice(-400)))));
