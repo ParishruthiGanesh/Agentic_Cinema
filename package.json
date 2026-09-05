@@ -2,19 +2,20 @@
   "name": "cinememory",
   "version": "0.1.0",
   "private": true,
-  "description": "CineMemory — the memory & verification layer for agentic filmmaking",
+  "description": "CineMemory \u2014 the memory & verification layer for agentic filmmaking",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm -r --parallel dev",
     "dev:api": "pnpm --filter @cinememory/api dev",
     "dev:web": "pnpm --filter @cinememory/web dev",
-    "test": "pnpm -r test",
+    "test": "node scripts/check-secrets.mjs && pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "demo:seed": "pnpm --filter @cinememory/api seed:demo",
     "eval": "pnpm --filter @cinememory/api eval",
     "clickhouse:local": "python3 deploy/local-clickhouse/server.py --port 8123 --data ./data/clickhouse",
-    "gemini:smoke": "pnpm --filter @cinememory/api gemini:smoke"
+    "gemini:smoke": "pnpm --filter @cinememory/api gemini:smoke",
+    "check:secrets": "node scripts/check-secrets.mjs"
   },
   "engines": {
     "node": ">=22.13"

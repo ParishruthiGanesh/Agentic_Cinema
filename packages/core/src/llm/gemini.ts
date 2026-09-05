@@ -17,6 +17,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Gemini provider using the official @google/genai SDK with JSON-schema constrained output.
+ * Default text model: gemini-3.6-flash (the API reports gemini-2.5-flash as no longer available to new users).
  * Every response is validated with zod; on validation failure the model is re-prompted once
  * with the validation errors, then the call fails loudly (never silently swallowed).
  */
@@ -35,7 +36,7 @@ export class GeminiLLMProvider implements LLMProvider {
       if (!opts.apiKey) throw new LLMConfigError("GEMINI_API_KEY is not set");
       this.ai = new GoogleGenAI({ apiKey: opts.apiKey });
     }
-    this.model = opts.model ?? "gemini-2.5-flash";
+    this.model = opts.model ?? "gemini-3.6-flash";
     this.maxRetries = opts.maxRetries ?? 3;
   }
 

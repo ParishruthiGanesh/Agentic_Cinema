@@ -96,7 +96,7 @@ pnpm --filter @cinememory/core build && pnpm --filter @cinememory/agent build
 | `GEMINI_API_KEY` | Google AI Studio key. Enables live Gemini agents, Gemini/Imagen keyframes, Gemini TTS, Gemini vision inspection. |
 | `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` | Use Vertex AI with Application Default Credentials instead of an API key. |
 | `LLM_PROVIDER` | `gemini` (default when a key is present) or `fixture` (development replay for the bundled demo only). |
-| `GEMINI_TEXT_MODEL` | default `gemini-2.5-flash` |
+| `GEMINI_TEXT_MODEL` | default `gemini-3.6-flash` |
 | `MEDIA_PROVIDER` | `gemini` or `placeholder` (labelled SVG storyboard cards, no video/audio). |
 | `GEMINI_IMAGE_MODEL`, `GEMINI_VIDEO_MODEL`, `GEMINI_TTS_MODEL` | defaults `gemini-2.5-flash-image`, `veo-3.0-fast-generate-001`, `gemini-2.5-flash-preview-tts`. An `imagen-*` image model switches to the Imagen API. |
 | `ENABLE_VIDEO_GENERATION` | `true` to call Veo (billable, slow). Keyframes and voice are generated regardless. |

@@ -4,7 +4,7 @@
 
 | Path | Model (env) | Code |
 |---|---|---|
-| Source understanding, adaptation, screenplay, shot planning, scene rewrite (repair) | `GEMINI_TEXT_MODEL` (default `gemini-2.5-flash`), JSON-schema constrained output | `packages/core/src/llm/gemini.ts` + `agents/*` |
+| Source understanding, adaptation, screenplay, shot planning, scene rewrite (repair) | `GEMINI_TEXT_MODEL` (default `gemini-3.6-flash`), JSON-schema constrained output | `packages/core/src/llm/gemini.ts` + `agents/*` |
 | Continuity reasoning: source-fidelity judge (quote-verified), visual keyframe inspection | same text model with vision | `critics/sourceFidelity.ts`, `critics/visual.ts` |
 | Keyframes and character reference sheets | `GEMINI_IMAGE_MODEL` (`gemini-2.5-flash-image`; `imagen-*` uses the Imagen API) | `media/gemini.ts` |
 | Video clips | `GEMINI_VIDEO_MODEL` (`veo-3.0-fast-generate-001`), `ENABLE_VIDEO_GENERATION=true` | `media/gemini.ts` |

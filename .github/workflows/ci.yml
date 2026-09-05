@@ -21,6 +21,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-secrets.mjs
       - run: pnpm --filter @cinememory/core build && pnpm --filter @cinememory/agent build
       - run: pnpm -r typecheck
       # Real ClickHouse engine for the integration test (chdb behind the local HTTP shim).

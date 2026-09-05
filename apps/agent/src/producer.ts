@@ -26,7 +26,7 @@ export function createProducerAgent(ctx: AgentContext, opts: ProducerOptions = {
   const tools = createCineMemoryTools(ctx);
   const toolList: BaseTool[] = [tools.listProjects, tools.createDemo, tools.create, tools.runStage, tools.status, tools.violations, tools.repair, tools.verify, tools.sceneMemory, tools.evaluate];
   const mcp = opts.clickhouseMcp ? new MCPToolset({ type: "StdioConnectionParams", serverParams: { command: opts.clickhouseMcp.command ?? "mcp-clickhouse", env: { ...process.env, ...opts.clickhouseMcp.env } as Record<string, string> } }, ["list_databases", "list_tables", "run_query"], "clickhouse_") : undefined;
-  const modelName = opts.model ?? "gemini-2.5-flash";
+  const modelName = opts.model ?? "gemini-3.6-flash";
   const model = opts.apiKey || opts.vertexai ? new Gemini({ model: modelName, apiKey: opts.apiKey, vertexai: opts.vertexai, project: opts.project, location: opts.location }) : modelName;
   const agent = new LlmAgent({
     name: "cinememory_producer",

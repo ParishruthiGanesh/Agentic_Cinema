@@ -31,7 +31,7 @@ async function main() {
     }
   };
 
-  const textModel = env.GEMINI_TEXT_MODEL ?? "gemini-2.5-flash";
+  const textModel = env.GEMINI_TEXT_MODEL ?? "gemini-3.6-flash";
   let llm: GeminiLLMProvider | undefined;
   try {
     llm = new GeminiLLMProvider({ apiKey: env.GEMINI_API_KEY, vertexai: vertex, project: env.GOOGLE_CLOUD_PROJECT, location: env.GOOGLE_CLOUD_LOCATION, model: textModel, maxRetries: 1 });
