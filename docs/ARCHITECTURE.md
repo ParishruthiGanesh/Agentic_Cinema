@@ -77,4 +77,11 @@ The Generation Service writes assets under `data/media/<project>/<shot>/` and st
 
 ## Persistence
 
-`DocumentStore` (SQLite via `node:sqlite`, or in-memory) → `Repository` (typed, zod-validated reads). Collections: projects, world, state_changes, adaptation, screenplay, shots, violations, checks, critic_runs, evaluations, film, plus the append-only `events` table. A partner store implements `DocumentStore` (or wraps `Repository`) to become the system of record.
+Two stores with different jobs:
+
+- **Document store** (`DocumentStore`: SQLite via `node:sqlite`, or in-memory) → `Repository` (typed, zod-validated reads). Holds the *current* artifacts the UI serves: projects, world, adaptation, screenplay, shots, violations, checks, critic runs, evaluations, film, plus the append-only `events` table.
+- **Production memory** (`ProductionMemory`: `ClickHouseMemory` in production, `LocalProductionMemory` for tests) holds the *history* and is what agents query: every screenplay version's scenes and state changes, knowledge events, constraints, violation history, checks, agent actions, generation and repair attempts, evaluation results. `AgentContext.memory` is passed to every agent; `persistWorldMemory` writes the fold to both stores; `runVerification`, the Director and the Repair Agent retrieve from `memory` and emit `memory.retrieved` events with the SQL. See `docs/PARTNER_INTEGRATION.md`.
+
+## Google ADK Producer
+
+`apps/agent` wraps the orchestrator, critics, repair loop, evaluation harness and production memory as ADK `FunctionTool`s on a Gemini `LlmAgent`, with the official ClickHouse MCP server attached as an `MCPToolset`. The API mounts it at `POST /api/agent/chat`; the Production page hosts the panel. See `docs/GOOGLE_CLOUD.md`.
