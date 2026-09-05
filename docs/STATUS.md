@@ -9,8 +9,9 @@ Live checklist for the build. Updated at the end of every phase.
 | ClickHouse production memory (`@clickhouse/client`) | **executed** against a real ClickHouse engine (chdb 26.7 behind `deploy/local-clickhouse/server.py`) | `packages/core/test/clickhouse.test.ts` passes: full pipeline recorded, scene-scoped retrieval from SQL, 14 tables populated; API `/api/projects/:id/memory` |
 | Official ClickHouse MCP server (`mcp-clickhouse`) | **executed** (list_databases / list_tables / run_query against the same engine) | attached to the ADK Producer as `MCPToolset` when `CLICKHOUSE_URL` is set |
 | Google ADK Producer agent (`@google/adk` LlmAgent + FunctionTools) | **constructed and tool-tested** (tools drive the real pipeline, retrieval and repair); the LLM turn itself needs a Gemini key | `apps/agent/test/tools.test.ts`; API `/api/agent/chat` returns a clear 503 without a key |
-| Gemini text (structured JSON), continuity reasoning, vision, TTS (`@google/genai`) | **executed** on a live key: smoke test 4/5, full demo pipeline to `narrative_verified`, baseline-vs-CineMemory evaluation (see DEMO.md) | model pool with quota/overload failover; every call in ClickHouse `agent_actions` |
-| Gemini image models, Veo | **blocked by billing**: every image model returns quota 0 on the free tier; Veo not attempted | needs a billing-enabled project |
+| Gemini text (structured JSON), continuity reasoning, vision, TTS (`@google/genai`) | **executed** on a live key: smoke test 5/5, full demo pipeline to `film_assembled`, baseline-vs-CineMemory evaluation (see DEMO.md) | model pool with quota/overload failover; every call in ClickHouse `agent_actions` |
+| Gemini image model (`gemini-3.1-flash-image`) + real-frame vision inspection | **executed** on a paid-tier key: 3 reference sheets, 15 keyframes, 75 vision inspections, 4 visual violations detected on real frames and repaired by regeneration, film assembled (see DEMO.md) | `data/media/<project>/shot_*/keyframe_v*.jpg`; `generation_attempts`, `violations`, `repair_attempts` in ClickHouse |
+| Veo video clips | **not attempted**: `ENABLE_VIDEO_GENERATION=false` until a budget is agreed; the film plays as keyframes + voice | `GeminiMediaProvider.generateVideo` is implemented and polled via the official SDK |
 | Development fixtures + placeholder media | used only when no key is configured; every artifact is stamped `fixture` / `placeholder` and the UI shows a banner | `packages/core/src/demo/fixtures.ts`, `media/placeholder.ts` |
 
 ## Done
@@ -31,14 +32,16 @@ Live checklist for the build. Updated at the end of every phase.
 
 ## Needs credentials / accounts (cannot be finished from inside the build sandbox)
 
-- [ ] Billing on the Gemini key's Google Cloud project → image quota (keyframes, real-frame vision inspection), Veo, and more than 20 requests/day/model
-- [ ] ClickHouse Cloud service → set `CLICKHOUSE_URL/USER/PASSWORD`; schema is created on first use
+- [x] Billing on the Gemini key's project (paid tier): image quota and real-frame vision now work
+- [ ] Veo budget decision → `ENABLE_VIDEO_GENERATION=true` (each 8 s clip is billable)
+- [ ] ClickHouse Cloud service: provisioned by the user and reachable from their laptop (`26.2.1.641`); the build sandbox cannot reach `*.clickhouse.cloud:8443`, so the Cloud run must be executed from the laptop or Cloud Run (same code, only `CLICKHOUSE_URL/USER/PASSWORD` differ)
 - [ ] Google Cloud project for Cloud Run (API + web) and optional Vertex AI Agent Engine deployment of the Producer
 - [ ] Public hosted URL (Cloud Run) and public GitHub repository visibility
 
 ## Known limitations
 
 - Knowledge-timeline detection is phrase based (deterministic and explainable, not semantic); the Producer agent and the source-fidelity judge add Gemini reasoning on top, but never replace the deterministic check.
-- Visual media checks are skipped (reported as not evaluated) without a vision provider or with placeholder keyframes.
+- Visual media checks are skipped (reported as not evaluated) without a vision provider or with placeholder keyframes. With real frames the Visual Critic is a Gemini vision judgement per shot and can be strict (it flagged a compass face without visible cracks) or miss subtle details; every finding carries the model's evidence text so a human can overrule it.
+- Shots play as keyframe + voice until Veo is enabled; the film manifest lists this as a warning, not as a video.
 - The local ClickHouse shim implements the subset of the HTTP interface used by the official clients; production must use ClickHouse Cloud or a ClickHouse server.
 - Subtitle timing splits each shot's duration evenly across its lines.

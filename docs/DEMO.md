@@ -28,7 +28,7 @@ Running the pipeline to `narrative_verified` on the demo (fixture mode or live G
 6. **Verification**: `KNOWLEDGE_TIMELINE_VIOLATION` in Scene 4 line 2 (Milo says "the needle follows the light" before Lumi tells him) and `REQUIRED_FACT_MISSING` (no line mentions bioluminescence).
 7. **Repair**: Scene 6 rewritten to add the fact (v2), Scene 4 rewritten to fix Milo's line (v3); memory refolded; critics re-run; both violations resolved; shots re-planned from the revised screenplay.
 
-Then to `film_assembled`: keyframes (placeholder cards without a media key, Gemini/Imagen images with one), prompt-level visual checks, film manifest with 6 chapters and 16 subtitle cues.
+Then to `film_assembled`: keyframes (placeholder cards without a media key, Gemini images with one), visual checks (prompt-level always; real-frame vision inspection when keyframes are real), film manifest with chapters and subtitle cues.
 
 ## Baseline vs CineMemory (fixture mode, from actual records)
 
@@ -60,6 +60,22 @@ Same project, live `gemini-3.6-flash` → `3.7` → `3.8` → `3.5` → `3-flash
 | Source pass rate | 87% | 93% |
 
 The live run of the main project itself (`pnpm demo:seed`) produced a 6-scene screenplay in which Lumi learns the secret in Scene 4 and Milo in Scene 5, detected one `SOURCE_CONTRADICTION`, repaired it with a Gemini scene rewrite, refolded memory to v2 and re-verified; 19 model calls are recorded in ClickHouse `agent_actions`.
+
+## Live media run (measured, 2026-09-05, paid tier)
+
+`pnpm demo:seed film_assembled` on the same project with `gemini-3.1-flash-image` for keyframes, `gemini-2.5-flash-preview-tts` for voice and `gemini-3.6-flash` vision for inspection. Wall time 22:59 → 23:13 (14 min). Veo was left off.
+
+| Step | Result |
+|---|---|
+| Reference sheets | 3 (Lumi, Milo, Pip), used as image references for every keyframe |
+| Media generation | 15 shots: 15 keyframes + 11 voice tracks, 0 failed |
+| Visual inspection pass 1 | 195 checks on real frames, 2 violations: `CHARACTER_IDENTITY_DRIFT` (shot 2.2: Milo's head and ears cropped out) and `PROP_MISSING` (shot 5.1: compass glass shows no cracks) |
+| Repairs | 4 regenerations, each verified by a fresh inspection pass: `PROP_MISSING` 5.1 → resolved; `PROP_MISSING` 1.1 (surfaced on pass 2) → resolved; `CHARACTER_IDENTITY_DRIFT` 2.2 → resolved, but the new frame put the satchel on the grass (`CLOTHING_MISMATCH`) → regenerated again → resolved |
+| Final inspection | 195 checks, 0 violations; 15 shots verified, 4 attempted / 4 resolved / 0 escalated |
+| Film | 15 segments, 75 s, chapters + subtitles; 251 checks, 7 violations resolved over the whole production, 0 unresolved; warning: segments play as keyframes (no Veo clips) |
+| ClickHouse | 292 events, 1146 checks, 37 generation attempts, 7 repair attempts, 94 model calls (92 on `gemini-3.6-flash`, 2 on `gemini-3.7-flash` after a failover), 125k input / 58k output tokens |
+
+The before/after frames are kept as versions (`data/media/lumi_demo/shot_2_2/keyframe_v1.jpg` → `keyframe_v3.jpg`), so the Storyboard shows the crop that was rejected and the frame that replaced it.
 
 ## ClickHouse in the demo
 
