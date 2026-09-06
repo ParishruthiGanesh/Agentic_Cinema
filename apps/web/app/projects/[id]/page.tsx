@@ -5,7 +5,7 @@ import { useProject } from "@/components/ProjectProvider";
 import { RunControls } from "@/components/RunControls";
 import { ActivityLog } from "@/components/ActivityLog";
 import { PageTitle, Section, Stat } from "@/components/ui";
-import { STAGES, pct, secs, stageIndex } from "@/lib/format";
+import { STAGES, modeLabel, pct, secs, stageIndex } from "@/lib/format";
 import { api } from "@/lib/api";
 import { useResource } from "@/lib/hooks";
 
@@ -43,11 +43,20 @@ export default function ProjectDashboard() {
         title={p.title}
         subtitle={
           <>
-            {p.mode === "kids" ? "Kids / educational" : "Creator"} · source: {p.source.kind.replace("_", " ")} “{p.source.title}” · {p.brief.format}, {p.brief.genre}, {p.brief.audience}
+            {modeLabel(p.mode)} · source: {p.source.kind.replace("_", " ")} “{p.source.title}” · {p.brief.format}, {p.brief.genre}, {p.brief.audience}
             {p.brief.ageRange ? ` (${p.brief.ageRange})` : ""} · target {secs(p.brief.targetDurationSec)}
           </>
         }
       />
+      {p.mode === "social_story" && p.socialStory && (
+        <div className="mb-4 rounded-lg border border-violet-glow/40 bg-violet-glow/5 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><span className="font-semibold text-ink-100">Social story for {p.socialStory.child.name}</span> <span className="text-ink-300">· {p.socialStory.steps.length} steps · one outfit: {p.socialStory.child.outfit}</span></div>
+            <Link href={`/projects/${id}/certificate`} className="btn-primary !py-1 !text-xs">{p.approval ? `Approved by ${p.approval.approvedBy}` : "Open Continuity Certificate"}</Link>
+          </div>
+          <ol className="mt-2 grid gap-1 text-xs text-ink-300 md:grid-cols-2">{p.socialStory.steps.map((s, i) => <li key={i}><span className="text-amber-glow">{i + 1}.</span> {s.title}</li>)}</ol>
+        </div>
+      )}
       <RunControls />
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         <Stat label="Production stage" value={<span className="text-base">{STAGES[stageIndex(p.stage)]?.label}</span>} hint={`${p.stages.filter((x) => x.status === "complete").length - 1}/${STAGES.length - 1} stages complete`} />

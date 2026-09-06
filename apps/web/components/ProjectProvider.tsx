@@ -22,7 +22,7 @@ export function useProject(): ProjectCtx {
   return c;
 }
 
-const NAV = [
+const NAV: Array<{ href: string; label: string; socialOnly?: boolean; filmOnly?: boolean }> = [
   { href: "", label: "Dashboard" },
   { href: "/story", label: "Story" },
   { href: "/cinegraph", label: "CineGraph" },
@@ -33,7 +33,8 @@ const NAV = [
   { href: "/continuity", label: "Continuity" },
   { href: "/memory", label: "Memory" },
   { href: "/film", label: "Final Film" },
-  { href: "/evaluation", label: "Evaluation" },
+  { href: "/certificate", label: "Certificate", socialOnly: true },
+  { href: "/evaluation", label: "Evaluation", filmOnly: true },
 ];
 
 export function ProjectProvider({ id, children }: { id: string; children: React.ReactNode }) {
@@ -63,10 +64,14 @@ export function ProjectProvider({ id, children }: { id: string; children: React.
                 </span>
               )}
             </div>
-            {p?.isDemo && <Pill value="demo" className="mt-1 border-teal-glow/50 text-teal-glow" />}
+            <div className="mt-1 flex flex-wrap gap-1">
+              {p?.mode === "social_story" && <Pill value="social story" className="border-violet-glow/60 text-violet-glow" />}
+              {p?.isDemo && <Pill value="demo" className="border-teal-glow/50 text-teal-glow" />}
+              {p?.approval && <Pill value="approved" className="border-lime-glow/50 text-lime-glow" />}
+            </div>
           </div>
           <nav className="flex flex-col gap-0.5">
-            {NAV.map((n) => {
+            {NAV.filter((n) => (p?.mode === "social_story" ? !n.filmOnly : !n.socialOnly)).map((n) => {
               const href = base + n.href;
               const active = n.href === "" ? pathname === base : pathname === href || pathname.startsWith(href + "/");
               return (

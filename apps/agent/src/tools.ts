@@ -7,6 +7,8 @@ import {
   continuitySummary,
   createProject,
   ensureDemoProject,
+  ensureSocialStoryDemo,
+  buildContinuityCertificate,
   repairViolation,
   retrieveSceneContext,
   runEvaluation,
@@ -39,6 +41,28 @@ export function createCineMemoryTools(ctx: AgentContext) {
     execute: async () => {
       const p = ensureDemoProject(ctx);
       return { projectId: p.id, title: p.title, stage: p.stage };
+    },
+  });
+
+  const createSocialDemo = new FunctionTool({
+    name: "create_social_story_demo",
+    description: "Create (or return) the bundled social-story demo 'Maya goes to the dentist' (a first-person routine for an autistic child whose words are compiled verbatim and whose pictures are verified for identity, outfit, setting, comfort items and forbidden content). Returns its id.",
+    execute: async () => {
+      const p = ensureSocialStoryDemo(ctx);
+      return { projectId: p.id, title: p.title, stage: p.stage, mode: p.mode };
+    },
+  });
+
+  const certificate = new FunctionTool({
+    name: "get_continuity_certificate",
+    description: "For a social-story project: the Continuity Certificate (status verified/issues/incomplete with reasons, per-step identity/outfit/setting/comfort-item/forbidden-content verification, repairs, word and order integrity, approval state).",
+    parameters: z.object({ projectId: z.string() }),
+    execute: async ({ projectId }) => {
+      const p = ctx.repo.getProject(projectId);
+      if (!p) return { error: "project not found" };
+      if (p.mode !== "social_story") return { error: "not a social-story project" };
+      const c = await buildContinuityCertificate(ctx, projectId);
+      return { status: c.status, reasons: c.reasons, wordsUnchanged: c.wordsUnchanged, sequenceOrdered: c.sequence.ordered, totals: c.totals, approval: c.approval ? { by: c.approval.approvedBy, at: c.approval.approvedAt, valid: c.approvalValid } : null, steps: c.steps.map((s) => ({ step: s.number, title: s.title, verified: s.verified, categories: Object.fromEntries(Object.entries(s.categories).map(([k, v]) => [k, v.state])), violations: s.violations.map((v) => `${v.code}:${v.status}`) })) };
     },
   });
 
@@ -169,7 +193,7 @@ export function createCineMemoryTools(ctx: AgentContext) {
     },
   });
 
-  return { listProjects, createDemo, create, runStage, status, violations, repair, verify, sceneMemory, evaluate };
+  return { listProjects, createDemo, createSocialDemo, create, runStage, status, violations, repair, verify, sceneMemory, certificate, evaluate };
 }
 
 export type CineMemoryTools = ReturnType<typeof createCineMemoryTools>;

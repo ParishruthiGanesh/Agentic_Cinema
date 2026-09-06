@@ -22,7 +22,7 @@ const SCREENPLAY_CODES: ViolationCode[] = [
   "REQUIRED_CHARACTER_MISSING",
   "SOURCE_CONTRADICTION",
 ];
-const MEDIA_CODES: ViolationCode[] = ["PROP_MISSING", "CHARACTER_IDENTITY_DRIFT", "CLOTHING_MISMATCH", "COLOR_MISMATCH", "LOCATION_MISMATCH", "TIME_OF_DAY_MISMATCH", "STYLE_MISMATCH"];
+const MEDIA_CODES: ViolationCode[] = ["PROP_MISSING", "CHARACTER_IDENTITY_DRIFT", "CLOTHING_MISMATCH", "COLOR_MISMATCH", "LOCATION_MISMATCH", "TIME_OF_DAY_MISMATCH", "STYLE_MISMATCH", "FORBIDDEN_CONTENT"];
 
 /** Step 1 of the repair protocol: which component caused the violation? */
 export function diagnoseRootCause(v: Violation): RootCause {

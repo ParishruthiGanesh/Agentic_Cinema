@@ -25,7 +25,7 @@ export default function ProductionPage() {
   if (!p) return null;
   return (
     <div>
-      <PageTitle title="Production" subtitle="Run, resume or reset the agent pipeline. Every stage persists its output, so runs can resume after a crash and re-runs of earlier stages invalidate everything downstream." />
+      <PageTitle title="Production" subtitle={p.mode === "social_story" ? "Social story: the routine is compiled verbatim (no model writes the words or plans the shots). Gemini generates the pictures, the Visual Critic inspects them against the locked identity, outfit, rooms, comfort items and forbidden list, and drift is regenerated." : "Run, resume or reset the agent pipeline. Every stage persists its output, so runs can resume after a crash and re-runs of earlier stages invalidate everything downstream."} />
       <RunControls />
       <div className="mt-4">
         <ProducerPanel projectId={id} />

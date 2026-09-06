@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useProject } from "@/components/ProjectProvider";
 import { Empty, PageTitle, Provenance, Section, Stat } from "@/components/ui";
@@ -13,8 +14,9 @@ import { secs } from "@/lib/format";
  * When an ffmpeg render exists it is offered directly.
  */
 export default function FilmPage() {
-  const { id, live } = useProject();
+  const { id, live, summary } = useProject();
   const film = useResource(() => api.film(id), [id, live.tick]);
+  const proj = summary.data?.project;
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
@@ -71,6 +73,13 @@ export default function FilmPage() {
   return (
     <div>
       <PageTitle title={m.title} subtitle={<>{secs(m.totalDurationSec)} · {m.segments.length} segments · {m.chapters.length} chapters · assembled {m.assembledAt.slice(0, 16).replace("T", " ")}</>} actions={m.renderedVideo ? <a className="btn-primary" href={mediaUrl(m.renderedVideo.path)} target="_blank" rel="noreferrer">Open rendered MP4</a> : <Provenance p={m.provenance} />} />
+      {proj?.mode === "social_story" && (
+        proj.approval ? (
+          <div className="mb-4 rounded-lg border border-lime-glow/40 bg-lime-glow/5 px-4 py-2 text-sm text-lime-glow">Approved by {proj.approval.approvedBy} on {proj.approval.approvedAt.slice(0, 10)}{proj.approval.note ? ` · ${proj.approval.note}` : ""}. <Link href={`/projects/${id}/certificate`} className="underline">Certificate</Link></div>
+        ) : (
+          <div className="mb-4 rounded-lg border border-amber-glow/40 bg-amber-glow/5 px-4 py-2 text-sm text-amber-soft">Not yet approved. Review the <Link href={`/projects/${id}/certificate`} className="underline">Continuity Certificate</Link> and sign it before showing this story to the child.</div>
+        )
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div>
           <div className="card overflow-hidden">

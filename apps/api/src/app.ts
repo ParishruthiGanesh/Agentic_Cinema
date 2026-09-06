@@ -5,23 +5,32 @@ import { z } from "zod";
 import { readFile, stat } from "node:fs/promises";
 import { join, normalize, extname } from "node:path";
 import {
+  ApprovalBlockedError,
   ClickHouseMemory,
   CreateProjectInput,
   EVAL_PREFIX,
+  MAYA_SOCIAL_STORY,
   Stage,
+  approveSocialStory,
   buildCineGraph,
+  buildContinuityCertificate,
   continuitySummary,
   createProject,
+  draftSocialStory,
   ensureDemoProject,
+  ensureSocialStoryDemo,
   generateShotMedia,
   listCharacterReferences,
   neighborhood,
+  removeCharacterReference,
   repairViolation,
   resetFromStage,
+  revokeApproval,
   runEvaluation,
   runPipeline,
   runVerification,
   retrieveSceneContext,
+  saveUploadedReference,
   type AgentContext,
   type Project,
 } from "@cinememory/core";
@@ -69,6 +78,7 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
 
   app.onError((err, c) => {
     if (err instanceof JobBusyError) return c.json({ error: err.message, job: err.job }, 409);
+    if (err instanceof ApprovalBlockedError) return c.json({ error: err.message, certificate: err.certificate }, 409);
     if (err instanceof z.ZodError) return c.json({ error: "Invalid request", issues: err.issues }, 400);
     console.error(err);
     return c.json({ error: err.message ?? String(err) }, 500);
@@ -97,6 +107,17 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
   });
 
   app.post("/api/projects/demo", (c) => c.json(projectSummary(ctx, ensureDemoProject(ctx)), 201));
+  app.post("/api/projects/social-story-demo", (c) => c.json(projectSummary(ctx, ensureSocialStoryDemo(ctx)), 201));
+
+  app.get("/api/social-stories/example", (c) => c.json(MAYA_SOCIAL_STORY));
+
+  /* ---- social stories: Gemini-assisted first draft (the adult edits it; the film uses their final words verbatim) ---- */
+  app.post("/api/social-stories/draft", async (c) => {
+    if (ctx.llm.name === "fixture") return c.json({ error: "Drafting needs a Gemini key (LLM_PROVIDER=fixture). You can still write the steps yourself." }, 503);
+    const body = z.object({ situation: z.string().min(3).max(500), childName: z.string().min(1).max(60), childAge: z.string().max(20).optional(), notes: z.string().max(2000).optional(), language: z.string().max(40).optional() }).parse(await c.req.json());
+    const res = await draftSocialStory(ctx.llm, body);
+    return c.json({ draft: res.data, provenance: res.provenance });
+  });
 
   app.get("/api/projects/:id", (c) => c.json(projectSummary(ctx, getProject(c.req.param("id")))));
 
@@ -170,6 +191,35 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
   app.get("/api/projects/:id/film", (c) => c.json(ctx.repo.getFilm(getProject(c.req.param("id")).id) ?? null));
   app.get("/api/projects/:id/evaluations", (c) => c.json(ctx.repo.listEvaluations(getProject(c.req.param("id")).id)));
   app.get("/api/projects/:id/references", (c) => c.json(listCharacterReferences(ctx, getProject(c.req.param("id")).id)));
+  app.post("/api/projects/:id/references/:characterId", async (c) => {
+    const project = getProject(c.req.param("id"));
+    const body = z.object({ mimeType: z.string(), data: z.string().min(1), uploadedBy: z.string().max(80).optional() }).parse(await c.req.json());
+    try {
+      const ref = await saveUploadedReference(ctx, project, c.req.param("characterId"), { mimeType: body.mimeType, data: body.data }, body.uploadedBy);
+      return c.json(ref, 201);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+  app.delete("/api/projects/:id/references/:characterId", (c) => {
+    const project = getProject(c.req.param("id"));
+    return c.json({ removed: removeCharacterReference(ctx, project.id, c.req.param("characterId")) });
+  });
+
+  /* ---- social stories: continuity certificate + human sign-off ---- */
+  app.get("/api/projects/:id/certificate", async (c) => {
+    const project = getProject(c.req.param("id"));
+    if (project.mode !== "social_story") return c.json({ error: "Certificates are produced for social-story projects" }, 400);
+    return c.json(await buildContinuityCertificate(ctx, project.id));
+  });
+  app.post("/api/projects/:id/approve", async (c) => {
+    const project = getProject(c.req.param("id"));
+    if (project.mode !== "social_story") return c.json({ error: "Approval applies to social-story projects" }, 400);
+    const body = z.object({ approvedBy: z.string().min(1).max(80), note: z.string().max(500).optional(), force: z.boolean().optional() }).parse(await c.req.json());
+    const r = await approveSocialStory(ctx, project.id, body);
+    return c.json(r);
+  });
+  app.delete("/api/projects/:id/approve", (c) => c.json(revokeApproval(ctx, getProject(c.req.param("id")).id)));
   app.get("/api/projects/:id/source-analysis", (c) => c.json(ctx.repo.store.get("source_analysis_raw", getProject(c.req.param("id")).id, "current") ?? null));
 
   app.get("/api/projects/:id/scenes/:sceneId/context", (c) => {
@@ -226,6 +276,7 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
 
   app.post("/api/projects/:id/evaluate", (c) => {
     const project = getProject(c.req.param("id"));
+    if (project.mode === "social_story") return c.json({ error: "The baseline-vs-CineMemory evaluation compares model-written screenplays; a social story's words are authored, so use the Continuity Certificate instead." }, 400);
     const job = jobs.start(project.id, "evaluate", "baseline vs CineMemory", () => runEvaluation(ctx, project.id).then(() => undefined));
     return c.json(job, 202);
   });

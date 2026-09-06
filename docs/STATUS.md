@@ -25,9 +25,10 @@ Live checklist for the build. Updated at the end of every phase.
 - [x] Gemini providers (text with JSON-schema output, vision, image/Imagen, Veo, TTS) via the official SDK, with retries and validation re-prompt
 - [x] Source Intelligence, Adaptation, Screenplay, World Memory, Director (deterministic prompt composer), Generation, Narrative / Source Fidelity / Visual critics, Repair (bounded, escalating), Film assembly, Evaluation harness
 - [x] **ADK Producer agent** with CineMemory tools + ClickHouse MCP toolset; terminal chat and in-product panel
-- [x] Web workspace: Dashboard, Story, CineGraph, Characters, Screenplay, Storyboard, Production (+ Producer agent), Continuity Command Center, **Memory (ClickHouse)**, Final Film, Evaluation
+- [x] Web workspace: Dashboard, Story, CineGraph, Characters (+ reference photo upload), Screenplay, Storyboard, Production (+ Producer agent), Continuity Command Center, **Memory (ClickHouse)**, Final Film, **Certificate**, Evaluation
+- [x] **Social story mode**: brief schema (child, one outfit, companions, settings, comfort items, steps, must-not-show, calming rules), deterministic compiler (world, adaptation, screenplay verbatim, one static shot per step), `FORBIDDEN_CONTENT` absence checks, Gemini draft helper, uploaded identity references, Continuity Certificate + approval gating, Maya demo, Producer tools
 - [x] Demo project (original story) with two engineered continuity faults; offline fixtures for tests
-- [x] Tests: 31 core (incl. ClickHouse integration) + 4 API + 2 agent
+- [x] Tests: 37 core (incl. ClickHouse integration and the offline social-story pipeline) + 5 API + 2 agent
 - [x] Docs: README, ARCHITECTURE, AGENTS, DATA_MODEL, DEMO, PARTNER_INTEGRATION (ClickHouse), GOOGLE_CLOUD, BUILD_PLAN
 
 ## Needs credentials / accounts (cannot be finished from inside the build sandbox)

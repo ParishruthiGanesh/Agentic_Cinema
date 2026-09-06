@@ -110,4 +110,36 @@ describe("API", () => {
     expect(spec.openapi).toBe("3.0.3");
     expect(Object.keys(spec.paths)).toContain("/api/projects/{id}/run");
   });
+
+  it("social story: demo, certificate gating, photo upload and approval", async () => {
+    const { app, jobs } = makeApp();
+    const created = await app.request("/api/projects/social-story-demo", { method: "POST" });
+    expect(created.status).toBe(201);
+    const id = (await created.json()).project.id;
+    expect((await (await app.request(`/api/projects/${id}`)).json()).project.mode).toBe("social_story");
+    // Uploading before analysis works for people named in the routine; strangers are refused.
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    const up = await app.request(`/api/projects/${id}/references/maya`, { method: "POST", body: JSON.stringify({ mimeType: "image/png", data: png, uploadedBy: "Mum" }), headers: { "content-type": "application/json" } });
+    expect(up.status).toBe(201);
+    expect((await up.json()).provenance.provider).toBe("upload");
+    const bad = await app.request(`/api/projects/${id}/references/stranger`, { method: "POST", body: JSON.stringify({ mimeType: "image/png", data: png }), headers: { "content-type": "application/json" } });
+    expect(bad.status).toBe(400);
+    await app.request(`/api/projects/${id}/run`, { method: "POST", body: JSON.stringify({ toStage: "film_assembled" }), headers: { "content-type": "application/json" } });
+    await waitIdle(jobs, id);
+    const cert = await (await app.request(`/api/projects/${id}/certificate`)).json();
+    expect(cert.status).toBe("incomplete");
+    expect(cert.steps).toHaveLength(7);
+    expect(cert.wordsUnchanged).toBe(true);
+    const blocked = await app.request(`/api/projects/${id}/approve`, { method: "POST", body: JSON.stringify({ approvedBy: "Therapist" }), headers: { "content-type": "application/json" } });
+    expect(blocked.status).toBe(409);
+    const forced = await app.request(`/api/projects/${id}/approve`, { method: "POST", body: JSON.stringify({ approvedBy: "Therapist", note: "placeholder review", force: true }), headers: { "content-type": "application/json" } });
+    expect(forced.status).toBe(200);
+    expect((await (await app.request(`/api/projects/${id}`)).json()).project.approval.approvedBy).toBe("Therapist");
+    const evalRes = await app.request(`/api/projects/${id}/evaluate`, { method: "POST" });
+    expect(evalRes.status).toBe(400);
+    const draft = await app.request("/api/social-stories/draft", { method: "POST", body: JSON.stringify({ situation: "haircut", childName: "Sam" }), headers: { "content-type": "application/json" } });
+    expect(draft.status).toBe(503);
+    const revoked = await app.request(`/api/projects/${id}/approve`, { method: "DELETE" });
+    expect((await revoked.json()).approval).toBeUndefined();
+  });
 });

@@ -24,6 +24,8 @@ export const ViolationCode = z.enum([
   "LOCATION_MISMATCH",
   "TIME_OF_DAY_MISMATCH",
   "STYLE_MISMATCH",
+  /** Something on the must-not-show list is visible in a frame (social stories). */
+  "FORBIDDEN_CONTENT",
 ]);
 export type ViolationCode = z.infer<typeof ViolationCode>;
 

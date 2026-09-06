@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useProject } from "@/components/ProjectProvider";
 import { Empty, PageTitle, Pill, Provenance } from "@/components/ui";
-import { api, mediaUrl } from "@/lib/api";
+import { api, fileToBase64, mediaUrl } from "@/lib/api";
 import { useResource } from "@/lib/hooks";
 
 export default function CharactersPage() {
@@ -10,7 +11,32 @@ export default function CharactersPage() {
   const world = useResource(() => api.world(id), [id, live.tick]);
   const screenplay = useResource(() => api.screenplay(id), [id, live.tick]);
   const refs = useResource(() => api.references(id), [id, live.tick]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
   const w = world.data;
+  const upload = async (cid: string, file?: File) => {
+    if (!file) return;
+    setBusy(cid);
+    setError(undefined);
+    try {
+      const data = await fileToBase64(file);
+      await api.uploadReference(id, cid, data);
+      await refs.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const remove = async (cid: string) => {
+    setBusy(cid);
+    try {
+      await api.removeReference(id, cid);
+      await refs.refresh();
+    } finally {
+      setBusy(null);
+    }
+  };
   if (world.loading) return <div className="text-sm text-ink-400">Loading…</div>;
   if (!w) return <Empty title="No characters yet" hint="Run source analysis to extract the character bible." />;
   const sceneNum = (sid: string) => screenplay.data?.scenes.find((s) => s.id === sid)?.number;
@@ -18,7 +44,8 @@ export default function CharactersPage() {
 
   return (
     <div>
-      <PageTitle title="Character bible" subtitle="Canonical identity from the source. Visual constraints are injected into every shot prompt containing the character and verified by the Visual Critic." />
+      <PageTitle title="Character bible" subtitle="Canonical identity from the source. Visual constraints are injected into every shot prompt containing the character and verified by the Visual Critic. Upload a photo or drawing to use it as the identity reference instead of a generated sheet." />
+      {error && <div className="mb-3 text-sm text-rose-glow">{error}</div>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {w.characters.map((c) => {
           const vcs = w.visualConstraints.filter((v) => v.entityId === c.id);
@@ -33,9 +60,14 @@ export default function CharactersPage() {
                 <div className="relative aspect-square max-h-56 w-full overflow-hidden bg-ink-950">
                   <img src={mediaUrl(ref.path)} alt={`${c.name} reference`} className="h-full w-full object-cover" />
                   <div className="absolute bottom-2 left-2"><Provenance p={ref.provenance} /></div>
-                  <div className="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-ink-200">reference appearance</div>
+                  <div className="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-ink-200">{ref.provenance.provider === "upload" ? "uploaded reference photo" : "reference appearance"}</div>
                 </div>
               )}
+              <div className="flex items-center gap-2 border-b border-ink-700/60 bg-ink-900/40 px-4 py-1.5 text-[11px] text-ink-400">
+                <label className="cursor-pointer text-amber-glow hover:underline">{ref ? "Replace reference with a photo" : "Upload reference photo"}<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={busy === c.id} onChange={(e) => upload(c.id, e.target.files?.[0])} /></label>
+                {ref && <button className="text-rose-glow hover:underline" disabled={busy === c.id} onClick={() => remove(c.id)}>remove</button>}
+                {busy === c.id && <span>working…</span>}
+              </div>
               <div className="flex items-center gap-3 border-b border-ink-700/60 bg-ink-900/60 px-4 py-3">
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-amber-glow to-rose-glow text-lg font-bold text-ink-950">{initials}</div>
                 <div className="min-w-0">

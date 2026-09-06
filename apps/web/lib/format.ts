@@ -15,6 +15,9 @@ export const STAGES: Array<{ id: Stage; label: string; short: string }> = [
 
 export const stageIndex = (s: Stage) => STAGES.findIndex((x) => x.id === s);
 
+export const MODE_LABEL: Record<string, string> = { creator: "Creator", kids: "Kids / educational", social_story: "Social story" };
+export const modeLabel = (m: string) => MODE_LABEL[m] ?? m;
+
 export function pct(v: number | null | undefined): string {
   if (v === null || v === undefined) return "n/a";
   return `${Math.round(v * 100)}%`;

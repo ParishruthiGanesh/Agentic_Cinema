@@ -43,6 +43,8 @@ export interface ComposeOptions {
   /** When false (baseline evaluation), CineMemory state and constraints are NOT injected. */
   injectMemory: boolean;
   visualStyle: string;
+  /** Extra negative-prompt terms (e.g. a social story's must-not-show list). */
+  avoid?: string[];
 }
 
 /**
@@ -78,7 +80,8 @@ export function composeVisualPrompt(ctx: SceneContext, shot: z.infer<typeof Shot
     parts.push(`${ctx.scene.timeOfDay}. Lighting: ${shot.lighting}.`);
   }
   parts.push(`Camera: ${shot.framing}, ${shot.cameraMovement}. 16:9 cinematic frame, no text, no watermark.`);
-  return { prompt: parts.join(" "), negativePrompt: "text, captions, watermark, logo, extra limbs, distorted faces, photorealistic gore", constraintIds };
+  const negative = ["text, captions, watermark, logo, extra limbs, distorted faces, photorealistic gore", ...(opts.avoid ?? [])].join(", ");
+  return { prompt: parts.join(" "), negativePrompt: negative, constraintIds };
 }
 
 export function buildShots(project: Project, ctx: SceneContext, out: ScenePlanOutput, opts: ComposeOptions, provenance: Shot["provenance"]): Shot[] {

@@ -24,7 +24,9 @@ const InspectionOutput = z.object({
 const INSPECT_SYSTEM = `You are the Visual Continuity Critic of CineMemory. You inspect a generated keyframe against the expected canonical state
 of the shot. For EACH listed constraint, report what you actually observe in the image and whether it is satisfied. Be literal and
 specific (colors, items, counts, position). If the element is not visible, say so and mark unsatisfied with your confidence.
-Do not assume anything not visible.`;
+Do not assume anything not visible.
+Constraints whose attribute starts with "must_not_show" are ABSENCE constraints: they are satisfied only when nothing of that kind is
+visible anywhere in the frame; if you see it, mark unsatisfied and describe exactly where.`;
 
 export interface VisualCriticOptions {
   mediaDir: string;
@@ -39,6 +41,7 @@ function relevantConstraints(world: WorldState, shot: Shot): VisualConstraint[] 
 
 const CODE_FOR_ATTRIBUTE = (attr: string, entityType: VisualConstraint["entityType"]) => {
   const a = attr.toLowerCase();
+  if (a.startsWith("must_not_show")) return "FORBIDDEN_CONTENT" as const;
   if (entityType === "prop") return "PROP_MISSING" as const;
   if (entityType === "location") return "LOCATION_MISMATCH" as const;
   if (entityType === "style") return "STYLE_MISMATCH" as const;

@@ -9,6 +9,12 @@ CineMemory turns a story into a short film through an orchestrated multi-agent w
 
 The innovation is not "generate AI movies". It is the persistent, structured **world memory** every agent reads from and writes to, the **critics** that check every scene and shot against that memory with evidence, and the **bounded repair loop** that fixes only the component that broke.
 
+### Where it matters: social stories for autistic children
+
+Therapists and parents write **social stories**, first-person step-by-step previews of a situation (a dentist visit, the first day of school) so an autistic child faces no surprises. They only work if every picture shows the same child, the same clothes, the same room and the same order, because inconsistency is what the child will notice. That is precisely what image generators get wrong, so this use has been closed to generative tools.
+
+CineMemory's **social story mode** compiles the adult's words verbatim, locks identity, one outfit, rooms, comfort items and a must-not-show list as constraints, inspects every generated frame against them with a vision model, regenerates drift, and produces a **Continuity Certificate** the therapist or parent signs before the film reaches the child. Demo: *Maya goes to the dentist*. Details: [docs/SOCIAL_STORIES.md](docs/SOCIAL_STORIES.md).
+
 ---
 
 ## Problem
@@ -28,7 +34,7 @@ Generative video models produce impressive individual clips and fall apart acros
 | **CineGraph** | Interactive graph of Character → Scene → Event → Prop → Location → Knowledge → Constraint, including who knows a secret from which scene and who still does not. |
 | **Evaluation** | A harness runs the same project as *baseline* (no retrieval, no constraints, no repair) and as *CineMemory*, and computes metrics from the persisted check and violation records of each run. |
 
-Two workflows are supported: **Creator / Filmmaker** (original, public-domain, licensed material, screenplay, idea) and **Kids / Educational** (lesson, concept, facts; required facts become must-keep source constraints that the Source Fidelity Critic verifies in the final screenplay).
+Three workflows are supported: **Social story** (an authored routine for an autistic child, compiled verbatim, pictures verified for identity, outfit, setting, comfort items and forbidden content, human sign-off on a Continuity Certificate), **Creator / Filmmaker** (original, public-domain, licensed material, screenplay, idea) and **Kids / Educational** (lesson, concept, facts; required facts become must-keep source constraints that the Source Fidelity Critic verifies in the final screenplay).
 
 ## Architecture
 

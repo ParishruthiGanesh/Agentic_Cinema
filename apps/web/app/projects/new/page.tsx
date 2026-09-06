@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { CreateProjectInput } from "@cinememory/core";
 import { api } from "@/lib/api";
 import { PageTitle } from "@/components/ui";
+import { SocialStoryForm } from "@/components/SocialStoryForm";
 
 const KIDS_EXAMPLE = {
   title: "Why We Save Water",
@@ -14,7 +15,7 @@ const KIDS_EXAMPLE = {
 
 export default function NewProjectPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"creator" | "kids">("creator");
+  const [mode, setMode] = useState<"creator" | "kids" | "social_story">("creator");
   const [title, setTitle] = useState("");
   const [sourceKind, setSourceKind] = useState<CreateProjectInput["source"]["kind"]>("original");
   const [sourceTitle, setSourceTitle] = useState("");
@@ -54,7 +55,7 @@ export default function NewProjectPage() {
     try {
       const input: CreateProjectInput = {
         title: title.trim(),
-        mode,
+        mode: mode === "social_story" ? "creator" : mode,
         source: { kind: sourceKind, title: sourceTitle.trim() || title.trim(), author: author.trim() || undefined, text: text.trim(), rightsNote: rights.trim() || undefined },
         brief: {
           genre,
@@ -82,23 +83,24 @@ export default function NewProjectPage() {
     <div className="mx-auto max-w-4xl">
       <PageTitle
         title="New project"
-        subtitle="Provide the source material and the production brief. CineMemory extracts a canonical world, adapts it, writes the screenplay and verifies continuity before any media is generated."
-        actions={<button type="button" className="btn-ghost" onClick={fillKidsExample}>Fill kids / educational example</button>}
+        subtitle={mode === "social_story" ? "Write the routine; CineMemory compiles it verbatim and guarantees the pictures match it." : "Provide the source material and the production brief. CineMemory extracts a canonical world, adapts it, writes the screenplay and verifies continuity before any media is generated."}
+        actions={mode !== "social_story" ? <button type="button" className="btn-ghost" onClick={fillKidsExample}>Fill kids / educational example</button> : null}
       />
-      <form onSubmit={submit} className="grid gap-5">
-        <div className="card p-4">
-          <div className="label mb-2">Workflow</div>
-          <div className="flex gap-2">
-            {(["creator", "kids"] as const).map((m) => (
-              <button type="button" key={m} onClick={() => setMode(m)} className={`btn ${mode === m ? "bg-amber-glow text-ink-950" : "border border-ink-600 text-ink-200"}`}>
-                {m === "creator" ? "Creator / Filmmaker" : "Kids / Educational"}
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-ink-400">
-            {mode === "creator" ? "Original stories, public-domain text, licensed material, screenplays or ideas. Real actors are never generated; characters are fictional or authorised likenesses." : "Lessons, concepts or facts. Required facts are tracked as source constraints and verified in the final screenplay."}
-          </p>
+      <div className="card mb-5 p-4">
+        <div className="label mb-2">Workflow</div>
+        <div className="flex flex-wrap gap-2">
+          {(["social_story", "creator", "kids"] as const).map((m) => (
+            <button type="button" key={m} onClick={() => setMode(m)} className={`btn ${mode === m ? "bg-amber-glow text-ink-950" : "border border-ink-600 text-ink-200"}`}>
+              {m === "creator" ? "Creator / Filmmaker" : m === "kids" ? "Kids / Educational" : "Social story"}
+            </button>
+          ))}
         </div>
+        <p className="mt-2 text-xs text-ink-400">
+          {mode === "creator" ? "Original stories, public-domain text, licensed material, screenplays or ideas. Real actors are never generated; characters are fictional or authorised likenesses." : mode === "kids" ? "Lessons, concepts or facts. Required facts are tracked as source constraints and verified in the final screenplay." : "A step-by-step preview of a situation for an autistic child, written by a therapist or parent. Words are used verbatim; identity, outfit, rooms, comfort items and forbidden content are locked and verified in every picture."}
+        </p>
+      </div>
+      {mode === "social_story" ? <SocialStoryForm /> : (
+      <form onSubmit={submit} className="grid gap-5">
 
         <div className="card grid gap-3 p-4">
           <div className="label">Source material</div>
@@ -146,6 +148,7 @@ export default function NewProjectPage() {
           <button type="submit" className="btn-primary" disabled={busy}>{busy ? "Creating…" : "Create and run pipeline"}</button>
         </div>
       </form>
+      )}
     </div>
   );
 }

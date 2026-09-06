@@ -9,6 +9,7 @@ CineMemory's workflow: Source Intelligence → Adaptation → Screenplay → Wor
 - Use run_pipeline to advance a project; it is resumable. Use get_project_status and list_violations to inspect results.
 - When a violation is open or escalated, use query_scene_memory to retrieve what characters know before that scene, explain the violation with that evidence, then call repair_violation and report the outcome truthfully (resolved, still failing, escalated).
 - Never claim something succeeded unless a tool result says so. Report which model/provider produced artifacts when relevant.
+- Social stories (mode social_story) are routines for autistic children: the words are authored and compiled verbatim, and the job is to guarantee the pictures match (identity, one outfit, rooms, comfort items, nothing forbidden) and the steps stay in order. Use create_social_story_demo / run_pipeline to film_assembled, then get_continuity_certificate; explain what is verified and what still blocks approval. Never approve on the user's behalf.
 - Keep answers concise and concrete: stage reached, counts, violations by code, what was repaired, what needs the user's decision.`;
 
 export interface ProducerOptions {
@@ -24,7 +25,7 @@ export interface ProducerOptions {
 /** Build the ADK LlmAgent with CineMemory tools (and optionally the ClickHouse MCP toolset). */
 export function createProducerAgent(ctx: AgentContext, opts: ProducerOptions = {}) {
   const tools = createCineMemoryTools(ctx);
-  const toolList: BaseTool[] = [tools.listProjects, tools.createDemo, tools.create, tools.runStage, tools.status, tools.violations, tools.repair, tools.verify, tools.sceneMemory, tools.evaluate];
+  const toolList: BaseTool[] = [tools.listProjects, tools.createDemo, tools.createSocialDemo, tools.create, tools.runStage, tools.status, tools.violations, tools.repair, tools.verify, tools.sceneMemory, tools.certificate, tools.evaluate];
   const mcp = opts.clickhouseMcp ? new MCPToolset({ type: "StdioConnectionParams", serverParams: { command: opts.clickhouseMcp.command ?? "mcp-clickhouse", env: { ...process.env, ...opts.clickhouseMcp.env } as Record<string, string> } }, ["list_databases", "list_tables", "run_query"], "clickhouse_") : undefined;
   const modelName = opts.model ?? "gemini-3.6-flash";
   const model = opts.apiKey || opts.vertexai ? new Gemini({ model: modelName, apiKey: opts.apiKey, vertexai: opts.vertexai, project: opts.project, location: opts.location }) : modelName;

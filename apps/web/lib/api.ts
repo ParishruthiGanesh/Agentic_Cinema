@@ -1,5 +1,8 @@
 import type {
   AdaptationPlan,
+  ContinuityCertificate,
+  SocialStoryBrief,
+  SocialStoryDraft,
   CheckRecord,
   CineGraph,
   ContinuitySummary,
@@ -125,6 +128,14 @@ export const api = {
   project: (id: string) => request<ProjectSummary>(`/api/projects/${id}`),
   createProject: (input: CreateProjectInput) => request<ProjectSummary>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
   createDemo: () => request<ProjectSummary>("/api/projects/demo", { method: "POST" }),
+  createSocialStoryDemo: () => request<ProjectSummary>("/api/projects/social-story-demo", { method: "POST" }),
+  socialStoryExample: () => request<SocialStoryBrief>("/api/social-stories/example"),
+  draftSocialStory: (input: { situation: string; childName: string; childAge?: string; notes?: string; language?: string }) => request<{ draft: SocialStoryDraft; provenance: { provider: string; model?: string; latencyMs?: number } }>("/api/social-stories/draft", { method: "POST", body: JSON.stringify(input) }),
+  uploadReference: (id: string, characterId: string, file: { mimeType: string; data: string; uploadedBy?: string }) => request<{ characterId: string; path: string }>(`/api/projects/${id}/references/${characterId}`, { method: "POST", body: JSON.stringify(file) }),
+  removeReference: (id: string, characterId: string) => request<{ removed: boolean }>(`/api/projects/${id}/references/${characterId}`, { method: "DELETE" }),
+  certificate: (id: string) => request<ContinuityCertificate>(`/api/projects/${id}/certificate`),
+  approve: (id: string, input: { approvedBy: string; note?: string; force?: boolean }) => request<{ project: Project; certificate: ContinuityCertificate }>(`/api/projects/${id}/approve`, { method: "POST", body: JSON.stringify(input) }),
+  revokeApproval: (id: string) => request<Project>(`/api/projects/${id}/approve`, { method: "DELETE" }),
   deleteProject: (id: string) => request<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" }),
   run: (id: string, toStage?: Stage, force = false) => request<Job>(`/api/projects/${id}/run`, { method: "POST", body: JSON.stringify({ toStage, force }) }),
   reset: (id: string, stage: Stage) => request<Project>(`/api/projects/${id}/reset`, { method: "POST", body: JSON.stringify({ stage }) }),
@@ -156,3 +167,17 @@ export const api = {
 };
 
 export const mediaUrl = (path?: string) => (path ? `${API_URL}/media/${path}` : undefined);
+
+/** Read a browser File as base64 (without the data: prefix) for the reference upload endpoint. */
+export function fileToBase64(file: File): Promise<{ mimeType: string; data: string }> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error("Could not read file"));
+    r.onload = () => {
+      const url = String(r.result);
+      const comma = url.indexOf(",");
+      resolve({ mimeType: file.type || "image/png", data: url.slice(comma + 1) });
+    };
+    r.readAsDataURL(file);
+  });
+}

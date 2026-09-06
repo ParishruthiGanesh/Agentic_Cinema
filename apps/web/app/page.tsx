@@ -4,17 +4,17 @@ import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useResource } from "@/lib/hooks";
-import { STAGES, pct, stageIndex, timeAgo } from "@/lib/format";
+import { STAGES, modeLabel, pct, stageIndex, timeAgo } from "@/lib/format";
 import { Empty, PageTitle, Pill } from "@/components/ui";
 
 export default function DashboardPage() {
   const projects = useResource(() => api.projects(), [], 5000);
   const [busy, setBusy] = useState(false);
 
-  const createDemo = async () => {
+  const createDemo = async (kind: "film" | "social" = "film") => {
     setBusy(true);
     try {
-      const s = await api.createDemo();
+      const s = kind === "social" ? await api.createSocialStoryDemo() : await api.createDemo();
       await api.run(s.project.id, "narrative_verified").catch(() => undefined);
       await projects.refresh();
     } finally {
@@ -29,8 +29,11 @@ export default function DashboardPage() {
         subtitle="Every project carries a persistent world memory, a verified screenplay, planned shots and a continuity record."
         actions={
           <>
-            <button className="btn-ghost" onClick={createDemo} disabled={busy}>
-              {busy ? "Creating…" : "Create demo project"}
+            <button className="btn-ghost" onClick={() => createDemo("social")} disabled={busy}>
+              {busy ? "Creating…" : "Social story demo: Maya at the dentist"}
+            </button>
+            <button className="btn-ghost" onClick={() => createDemo("film")} disabled={busy}>
+              {busy ? "Creating…" : "Film demo: Lumi"}
             </button>
             <Link href="/projects/new" className="btn-primary">New project</Link>
           </>
@@ -40,11 +43,12 @@ export default function DashboardPage() {
       {projects.data && projects.data.length === 0 && (
         <Empty
           title="No projects yet"
-          hint='Create the bundled demo ("Lumi and the Broken Compass") to see the whole pipeline — extraction, world memory, screenplay, CineGraph, continuity checks and autonomous repair — or start from your own story.'
+          hint='Create the social story demo ("Maya goes to the dentist") to see identity, outfit, setting and step-order verification on a case where it matters, or the film demo ("Lumi and the Broken Compass") for the full adaptation pipeline.'
           action={
-            <button className="btn-primary" onClick={createDemo} disabled={busy}>
-              {busy ? "Creating…" : "Create demo project"}
-            </button>
+            <div className="flex gap-2">
+              <button className="btn-primary" onClick={() => createDemo("social")} disabled={busy}>{busy ? "Creating…" : "Create social story demo"}</button>
+              <button className="btn-ghost" onClick={() => createDemo("film")} disabled={busy}>Create film demo</button>
+            </div>
           }
         />
       )}
@@ -58,10 +62,10 @@ export default function DashboardPage() {
                 <div className="min-w-0">
                   <div className="truncate text-base font-semibold text-ink-100">{p.title}</div>
                   <div className="mt-0.5 text-xs text-ink-400">
-                    {p.mode === "kids" ? "Kids / educational" : "Creator"} · {p.source.kind.replace("_", " ")} · {p.brief.targetDurationSec}s · updated {timeAgo(p.updatedAt)}
+                    {modeLabel(p.mode)} · {p.source.kind.replace("_", " ")} · {p.brief.targetDurationSec}s · updated {timeAgo(p.updatedAt)}
                   </div>
                 </div>
-                {p.isDemo && <Pill value="demo" className="border-teal-glow/50 text-teal-glow" />}
+                <span className="flex gap-1">{p.approval && <Pill value="approved" className="border-lime-glow/50 text-lime-glow" />}{p.isDemo && <Pill value="demo" className="border-teal-glow/50 text-teal-glow" />}</span>
               </div>
               <div className="mt-3 flex items-center gap-1">
                 {STAGES.map((st, i) => (

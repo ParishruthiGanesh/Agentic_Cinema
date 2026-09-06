@@ -4,8 +4,10 @@ import type { Project } from "../model/index.js";
 import { createProject } from "../workflow/orchestrator.js";
 import { ADAPTATION, SCREENPLAY, SHOT_PLANS, SOURCE_ANALYSIS } from "./fixtures.js";
 import { LUMI_DEMO_INPUT } from "./story.js";
+import { MAYA_DEMO_INPUT, SOCIAL_STORY_DEMO_ID } from "./maya.js";
 
 export { LUMI_DEMO_INPUT, LUMI_STORY } from "./story.js";
+export { MAYA_DEMO_INPUT, MAYA_SOCIAL_STORY, SOCIAL_STORY_DEMO_ID } from "./maya.js";
 export * as DEMO_FIXTURES from "./fixtures.js";
 
 export const DEMO_PROJECT_ID = "lumi_demo";
@@ -86,4 +88,11 @@ export function ensureDemoProject(ctx: AgentContext): Project {
   const existing = ctx.repo.getProject(DEMO_PROJECT_ID);
   if (existing) return existing;
   return createProject(ctx, LUMI_DEMO_INPUT, { id: DEMO_PROJECT_ID, isDemo: true });
+}
+
+/** Create (or return) the bundled social-story demo ("Maya goes to the dentist"). */
+export function ensureSocialStoryDemo(ctx: AgentContext): Project {
+  const existing = ctx.repo.getProject(SOCIAL_STORY_DEMO_ID);
+  if (existing) return existing;
+  return createProject(ctx, MAYA_DEMO_INPUT, { id: SOCIAL_STORY_DEMO_ID, isDemo: true });
 }
