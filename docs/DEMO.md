@@ -77,6 +77,22 @@ The live run of the main project itself (`pnpm demo:seed`) produced a 6-scene sc
 
 The before/after frames are kept as versions (`data/media/lumi_demo/shot_2_2/keyframe_v1.jpg` → `keyframe_v3.jpg`), so the Storyboard shows the crop that was rejected and the frame that replaced it.
 
+## Social story demo: "Maya goes to the dentist" (measured live, 2026-09-06)
+
+`tsx src/cli.ts seed-social film_assembled` on Gemini (paid tier) with local ClickHouse. Wall time 02:25:36 → 02:29:20 (under 4 minutes).
+
+| Step | Result |
+|---|---|
+| Story path (compile world, adaptation, screenplay, memory, shots) | deterministic, **0 model calls**; 7 steps → 7 scenes → 7 static eye-level shots; 34 constraints locked (4 must-not-show) |
+| Narrative + source fidelity | 25 + 20 checks, 0 violations (step order and calming rules verified) |
+| Media | 3 reference sheets + 7 keyframes (`gemini-3.1-flash-image`) + 7 voice tracks (TTS), 0 failed |
+| Vision inspection (`gemini-3.6-flash`) | 7 inspections, 177 media-level checks: identity, outfit, setting, comfort item, 4 forbidden-content and style constraints per frame; **0 violations on the first pass**, so no regeneration was needed |
+| Certificate | `verified`: words unchanged, 12/12 order checks, 7/7 real frames inspected, 222/222 checks passed, 0 unresolved |
+| Film | 7 segments, 93 s, keyframes + voice |
+| ClickHouse | 92 events, 222 checks, 17 generation attempts, 7 model calls (12k in / 8.7k out tokens) |
+
+Same key, same day, the Lumi film needed 4 visual repairs. The social story needed none: locking one outfit, static shots and reference sheets removes most of the drift before it happens, and the certificate is the proof that it was checked rather than assumed. Approval was left unsigned on purpose; the therapist or parent signs on the Certificate page.
+
 ## ClickHouse in the demo
 
 With `CLICKHOUSE_URL` set, the same run writes ~600 rows across 14 tables for this production. The Memory page shows the tables, the SQL each agent ran, and the knowledge timeline (`lumi @ scene 3`, `milo @ scene 5`). Selecting "before scene 4" in the retrieval explorer shows exactly the rows the Narrative Critic used to flag Milo's line, and the violation history for Scene 4 (`KNOWLEDGE_TIMELINE_VIOLATION · resolved · 1 repair attempt`).
