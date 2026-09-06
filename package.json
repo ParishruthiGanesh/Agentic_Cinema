@@ -15,7 +15,9 @@
     "eval": "pnpm --filter @cinememory/api eval",
     "clickhouse:local": "python3 deploy/local-clickhouse/server.py --port 8123 --data ./data/clickhouse",
     "gemini:smoke": "pnpm --filter @cinememory/api gemini:smoke",
-    "check:secrets": "node scripts/check-secrets.mjs"
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "build:libs": "pnpm --filter @cinememory/core build && pnpm --filter @cinememory/agent build",
+    "postinstall": "pnpm run build:libs"
   },
   "engines": {
     "node": ">=22.13"

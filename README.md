@@ -86,10 +86,11 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/GOOGLE_CLOUD.md](
 Requirements: Node ≥ 22.13 (uses the built-in `node:sqlite`), pnpm 10, Python 3 (for the local ClickHouse engine and the ClickHouse MCP server).
 
 ```bash
-pnpm install
+pnpm install                  # also builds packages/core and apps/agent (postinstall)
 cp .env.example .env          # 1) GEMINI_API_KEY  2) CLICKHOUSE_URL (+ user/password)
-pnpm --filter @cinememory/core build && pnpm --filter @cinememory/agent build
 ```
+
+After a `git pull` that changes `packages/core` or `apps/agent`, run `pnpm build:libs` (or `pnpm install`) before `pnpm dev:api`, otherwise the API loads a stale build and fails with a missing-export error.
 
 **Where to put the Gemini key:** in `.env` at the repository root, as `GEMINI_API_KEY=AIza...` (create the key at <https://aistudio.google.com/apikey>). The API reads `.env` from the repo root on start; on Cloud Run set the same name as an environment variable or secret. `.env` is git-ignored; never commit it.
 
