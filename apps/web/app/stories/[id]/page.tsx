@@ -97,12 +97,20 @@ function Story({ id }: { id: string }) {
 
       {ready && c && (
         <>
-          {summary.data && summary.data.clips === 0 && (
-            <Card className="flex flex-wrap items-center justify-between gap-3">
-              <div><div className="font-semibold">Still pictures for now</div><div className="text-sm text-[#7a7264]">Add moving pictures: a gentle clip for each step, starting from its checked picture. Every clip is checked again, and you approve again afterwards.</div></div>
-              <Button kind="ghost" onClick={() => act(() => api.addVideo(id), "video")} disabled={busy === "video"}>{busy === "video" ? "Starting…" : "Add moving pictures"}</Button>
-            </Card>
-          )}
+          {summary.data && (() => {
+            const clips = summary.data.clips;
+            const total = c.steps.length;
+            if (clips >= total) return <div className="inline-flex items-center gap-2 rounded-full bg-[#e3f2e8] px-3 py-1 text-sm font-semibold text-[#2f7d4f]">✓ Moving pictures done{summary.data.videoPath ? " · video file ready" : ""}</div>;
+            return (
+              <Card className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">{clips === 0 ? "Still pictures for now" : `Moving pictures: ${clips} of ${total} done`}</div>
+                  <div className="text-sm text-[#7a7264]">{clips === 0 ? "Add moving pictures: a gentle clip for each step, starting from its checked picture. Every clip is checked again, and you approve again afterwards." : `${total - clips} step${total - clips === 1 ? "" : "s"} still need a clip.`}</div>
+                </div>
+                <Button kind="ghost" onClick={() => act(() => api.addVideo(id), "video")} disabled={busy === "video"}>{busy === "video" ? "Starting…" : clips === 0 ? "Add moving pictures" : "Finish the missing clips"}</Button>
+              </Card>
+            );
+          })()}
           <Card className={c.status === "verified" ? "border-[#bfe0cb]" : "border-[#f1d38a]"}>
             {c.status === "verified" ? (
               <div className="text-lg font-semibold">All {c.steps.length} pictures match {c.child}, the clothes, the rooms and the must-not list.</div>
