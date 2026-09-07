@@ -157,3 +157,20 @@ describe("Plain-language critic, child profile, outcomes", () => {
     void o;
   });
 });
+
+describe("Video path", () => {
+  it("skips clips gracefully when the media provider cannot make video, and never renders placeholders", async () => {
+    const { generateAllVideos } = await import("../src/media/generation.js");
+    const ctx = makeTestContext();
+    const project = ensureSocialStoryDemo(ctx);
+    await runPipeline(ctx, project.id, { toStage: "film_assembled" });
+    const r = await generateAllVideos(ctx, ctx.repo.getProject(project.id)!);
+    expect(r.generated).toHaveLength(0);
+    expect(r.failed).toHaveLength(7);
+    expect(r.failed[0].error).toMatch(/no generated keyframe|cannot generate video/);
+    // Placeholder cards are never rendered into an MP4.
+    expect(ctx.repo.getFilm(project.id)?.renderedVideo).toBeUndefined();
+    const types = ctx.repo.listEvents(project.id).map((e) => e.type);
+    expect(types).toContain("video.summary");
+  });
+});

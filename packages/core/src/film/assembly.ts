@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ffmpeg, resolveFfmpeg } from "../media/ffmpeg.js";
 import type { AgentContext } from "../agents/context.js";
 import type { FilmManifest, Project } from "../model/index.js";
 
@@ -30,7 +30,9 @@ export async function assembleFilm(ctx: AgentContext, project: Project): Promise
       chapters.push({ sceneId: s.sceneId, title: scene ? `Scene ${scene.number}: ${scene.title}` : s.sceneId, startSec: t, durationSec: 0 });
       currentScene = s.sceneId;
     }
-    const dur = s.video?.durationSec ?? s.durationSec;
+    // A segment lasts as long as its clip or planned length, and never cuts the voice off.
+    const voice = s.audio?.durationSec ? s.audio.durationSec + 0.6 : 0;
+    const dur = Math.round(Math.max(s.video?.durationSec ?? s.durationSec, voice) * 10) / 10;
     segments.push({ shotId: s.id, sceneId: s.sceneId, startSec: t, durationSec: dur, video: s.video, keyframe: s.keyframe, audio: s.audio });
     const spoken = s.dialogue.filter((d) => d.text.trim());
     if (spoken.length) {
@@ -50,13 +52,15 @@ export async function assembleFilm(ctx: AgentContext, project: Project): Promise
   const placeholderFrames = segments.filter((s) => s.keyframe?.provenance.provider === "placeholder").length;
   if (placeholderFrames) warnings.push(`${placeholderFrames} keyframes are development placeholders, not model output`);
 
+  // One MP4 whenever there is real media: clips (or held pictures) with the voice laid over them.
   let renderedVideo: FilmManifest["renderedVideo"];
-  if (missingClips === 0 && segments.length > 0) {
+  const renderable = segments.filter((s) => s.video || (s.keyframe && s.keyframe.provenance.provider !== "placeholder"));
+  if (renderable.length === segments.length && segments.length > 0) {
     try {
       renderedVideo = await renderWithFfmpeg(ctx, project, segments);
-      if (renderedVideo) events.emit(project.id, "film_assembler", "film.rendered", `Rendered ${renderedVideo.path} with ffmpeg`, {}, "success");
+      if (renderedVideo) events.emit(project.id, "film_assembler", "film.rendered", `Rendered ${renderedVideo.path} (${Math.round(renderedVideo.durationSec ?? 0)}s, ${segments.filter((s) => s.video).length} clips + ${segments.filter((s) => !s.video).length} held pictures, voice mixed in)`, { path: renderedVideo.path }, "success");
     } catch (e) {
-      events.emit(project.id, "film_assembler", "film.render.skipped", `ffmpeg render skipped: ${(e as Error).message}`, {}, "warn");
+      events.emit(project.id, "film_assembler", "film.render.skipped", `MP4 render skipped: ${(e as Error).message}`, {}, "warn");
     }
   }
 
@@ -91,22 +95,33 @@ export function toVtt(cues: FilmManifest["subtitles"]): string {
 }
 
 async function renderWithFfmpeg(ctx: AgentContext, project: Project, segments: FilmManifest["segments"]): Promise<FilmManifest["renderedVideo"]> {
-  const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
-  const available = await new Promise<boolean>((resolve) => {
-    const p = spawn(ffmpeg, ["-version"]);
-    p.on("error", () => resolve(false));
-    p.on("exit", (code) => resolve(code === 0));
-  });
-  if (!available) throw new Error(`ffmpeg not available (${ffmpeg}); set FFMPEG_PATH to render an MP4`);
-  const dir = join(ctx.config.mediaDir, project.id);
+  const bin = await resolveFfmpeg();
+  if (!bin) throw new Error("ffmpeg not available: install it (brew install ffmpeg / pip install imageio-ffmpeg) or set FFMPEG_PATH");
+  const media = ctx.config.mediaDir;
+  const dir = join(media, project.id, "render");
+  await mkdir(dir, { recursive: true });
+  const parts: string[] = [];
+  const scale = "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,format=yuv420p";
+  for (const s of segments) {
+    const out = join(dir, `${s.shotId}.mp4`);
+    const dur = s.durationSec.toFixed(2);
+    const args: string[] = ["-y"];
+    if (s.video) {
+      // Hold the last frame if the voice runs longer than the clip; the clip's own audio is dropped.
+      args.push("-i", join(media, s.video.path));
+    } else {
+      args.push("-loop", "1", "-framerate", "24", "-i", join(media, s.keyframe!.path));
+    }
+    if (s.audio) args.push("-i", join(media, s.audio.path));
+    else args.push("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo");
+    const vf = s.video ? `${scale},tpad=stop_mode=clone:stop_duration=${Math.max(0, s.durationSec - (s.video.durationSec ?? s.durationSec)).toFixed(2)}` : scale;
+    args.push("-filter_complex", `[0:v]${vf}[v];[1:a]aresample=48000,apad[a]`, "-map", "[v]", "-map", "[a]", "-t", dur, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", out);
+    await ffmpeg(bin, args);
+    parts.push(out);
+  }
   const listPath = join(dir, "concat.txt");
-  await writeFile(listPath, segments.map((s) => `file '${join(ctx.config.mediaDir, s.video!.path).replace(/'/g, "'\\''")}'`).join("\n"));
+  await writeFile(listPath, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
   const outRel = `${project.id}/film.mp4`;
-  await new Promise<void>((resolve, reject) => {
-    const p = spawn(ffmpeg, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", join(ctx.config.mediaDir, outRel)]);
-    let err = "";
-    p.stderr.on("data", (d) => (err += d.toString()));
-    p.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(err.slice(-400)))));
-  });
-  return { kind: "video", path: outRel, mimeType: "video/mp4", durationSec: segments.reduce((a, s) => a + s.durationSec, 0), provenance: { provider: "ffmpeg", model: "concat", task: "film_render", createdAt: new Date().toISOString() } };
+  await ffmpeg(bin, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-movflags", "+faststart", join(media, outRel)]);
+  return { kind: "video", path: outRel, mimeType: "video/mp4", durationSec: segments.reduce((a, s) => a + s.durationSec, 0), provenance: { provider: "ffmpeg", model: "libx264+aac", task: "film_render", createdAt: new Date().toISOString(), note: `${segments.filter((s) => s.video).length} clips, ${segments.filter((s) => !s.video).length} held pictures, voice mixed in` } };
 }

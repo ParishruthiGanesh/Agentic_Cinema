@@ -21,6 +21,8 @@ import {
   ensureDemoProject,
   ensureSocialStoryDemo,
   generateShotMedia,
+  generateAllVideos,
+  assembleFilm,
   listCharacterReferences,
   listLocationReferences,
   StoryOutcomeInput,
@@ -90,6 +92,8 @@ export function projectSummary(ctx: AgentContext, project: Project, jobs?: JobRu
     film: !!ctx.repo.getFilm(project.id),
     lastEvent: ctx.repo.listEvents(project.id).slice(-1)[0],
     story: project.mode === "social_story" ? storyStatus(project, { running: !!jobs?.current(project.id), jobError: jobs?.recent(project.id)[0]?.error }) : undefined,
+    videoPath: ctx.repo.getFilm(project.id)?.renderedVideo?.path,
+    clips: ctx.repo.getShotPlan(project.id)?.shots.filter((s) => s.video).length ?? 0,
     coverPath: ctx.repo.getShotPlan(project.id)?.shots.find((s) => s.keyframe && s.keyframe.provenance.provider !== "placeholder")?.keyframe?.path,
   };
 }
@@ -222,7 +226,7 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
   app.post("/api/children/:id/stories", async (c) => {
     const child = ctx.repo.getChild(c.req.param("id"));
     if (!child) throw new NotFound("Child not found");
-    const body = z.object({ title: z.string().max(120).optional(), situation: z.string().min(1), steps: z.array(z.any()).min(1), settings: z.array(z.any()).optional(), companions: z.array(z.any()).optional(), comfortItems: z.array(z.any()).optional(), mustNotShow: z.array(z.string()).optional(), calmingRules: z.array(z.string()).optional(), authoredBy: z.string().optional(), style: z.enum(["illustrated", "photo"]).optional(), revisionOf: z.string().optional(), start: z.boolean().default(true) }).parse(await c.req.json());
+    const body = z.object({ title: z.string().max(120).optional(), situation: z.string().min(1), steps: z.array(z.any()).min(1), settings: z.array(z.any()).optional(), companions: z.array(z.any()).optional(), comfortItems: z.array(z.any()).optional(), mustNotShow: z.array(z.string()).optional(), calmingRules: z.array(z.string()).optional(), authoredBy: z.string().optional(), style: z.enum(["illustrated", "photo"]).optional(), revisionOf: z.string().optional(), video: z.boolean().default(false), start: z.boolean().default(true) }).parse(await c.req.json());
     const brief = SocialStoryBrief.parse(briefFromChild(child, body));
     const title = body.title?.trim() || `${child.name}: ${body.situation}`;
     const project = createProject(ctx, CreateProjectInput.parse({
@@ -233,6 +237,7 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
       socialStory: brief,
       childId: child.id,
       revisionOf: body.revisionOf,
+      video: body.video,
     }));
     await applyChildReferences(ctx, project);
     const job = body.start ? jobs.start(project.id, "pipeline", "make the story", () => runPipeline(ctx, project.id, { toStage: "film_assembled" }).then(() => undefined)) : null;
@@ -461,6 +466,21 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
     const job = jobs.start(project.id, "generate", `generate ${shotId}`, async () => {
       await generateShotMedia(ctx, project, shotId, { reason: "user request" });
       await runVerification(ctx, project, { critics: ["visual"] });
+    });
+    return c.json(job, 202);
+  });
+
+  /** Moving pictures for a story whose pictures already exist: a Veo clip per shot from its verified keyframe, re-check, re-assemble (renders the MP4). */
+  app.post("/api/projects/:id/video", (c) => {
+    const project = getProject(c.req.param("id"));
+    if (!ctx.media.capabilities.video) return c.json({ error: `${ctx.media.name} cannot generate video (configure Gemini)` }, 400);
+    if (!ctx.repo.getShotPlan(project.id)?.shots.some((s) => s.keyframe)) return c.json({ error: "Make the pictures first" }, 400);
+    ctx.repo.saveProject({ ...project, video: true, approval: undefined });
+    const job = jobs.start(project.id, "generate", "moving pictures", async () => {
+      const p = ctx.repo.getProject(project.id)!;
+      await generateAllVideos(ctx, p);
+      await runVerification(ctx, p, { critics: ["visual"] });
+      await assembleFilm(ctx, p);
     });
     return c.json(job, 202);
   });

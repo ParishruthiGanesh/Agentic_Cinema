@@ -60,6 +60,8 @@ export interface ProjectSummary {
   durationSec?: number;
   film: boolean;
   lastEvent?: WorkflowEvent;
+  videoPath?: string;
+  clips: number;
   story?: { code: "writing" | "drawing" | "checking" | "needs_approval" | "approved" | "failed" | "not_started"; label: string; detail: string };
   coverPath?: string;
 }
@@ -141,6 +143,7 @@ export interface CreateStoryInput {
   authoredBy?: string;
   style?: "illustrated" | "photo";
   revisionOf?: string;
+  video?: boolean;
   start?: boolean;
 }
 
@@ -227,6 +230,7 @@ export const api = {
   myChildren: () => request<Array<ChildProfile & { stories: number; photos: number; previews: number }>>("/api/children?mine=1"),
   claimDemoChild: () => request<ChildProfile>("/api/children/claim-demo", { method: "POST" }),
   previewChild: (id: string, style?: "illustrated" | "photo") => request<ChildPreview>(`/api/children/${id}/preview`, { method: "POST", body: JSON.stringify({ style }) }),
+  addVideo: (id: string) => request<Job>(`/api/projects/${id}/video`, { method: "POST" }),
   createStory: (childId: string, input: CreateStoryInput) => request<ProjectSummary & { job: Job | null }>(`/api/children/${childId}/stories`, { method: "POST", body: JSON.stringify(input) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" }),
   run: (id: string, toStage?: Stage, force = false) => request<Job>(`/api/projects/${id}/run`, { method: "POST", body: JSON.stringify({ toStage, force }) }),

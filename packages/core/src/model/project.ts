@@ -150,6 +150,8 @@ export const Project = z.object({
   childId: Id.optional(),
   /** Earlier story this one revises (after feedback). */
   revisionOf: Id.optional(),
+  /** Generate a moving clip (Veo) for every shot, not only a picture. Billable; the family opts in per story. */
+  video: z.boolean().default(false),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -164,6 +166,7 @@ export const CreateProjectInput = z
     socialStory: SocialStoryBrief.optional(),
     childId: Id.optional(),
     revisionOf: Id.optional(),
+    video: z.boolean().optional(),
   })
   .superRefine((input, ctx) => {
     if (input.mode === "social_story" && !input.socialStory) ctx.addIssue({ code: "custom", path: ["socialStory"], message: "mode social_story requires a socialStory brief" });

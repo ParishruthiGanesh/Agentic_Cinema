@@ -46,7 +46,7 @@ function Player() {
     return m.chapters.map((c) => {
       const segs = m.segments.filter((s) => s.sceneId === c.sceneId);
       const words = m.subtitles.filter((s) => s.startSec >= c.startSec && s.startSec < c.startSec + c.durationSec).map((s) => s.text);
-      return { title: c.title.replace(/^Scene \d+: /, ""), keyframe: segs.find((s) => s.keyframe)?.keyframe, audio: segs.map((s) => s.audio).filter(Boolean), words, durationSec: c.durationSec };
+      return { title: c.title.replace(/^Scene \d+: /, ""), keyframe: segs.find((s) => s.keyframe)?.keyframe, video: segs.find((s) => s.video)?.video, audio: segs.map((s) => s.audio).filter(Boolean), words, durationSec: c.durationSec };
     });
   }, [film.data]);
   const page = pages[i];
@@ -106,12 +106,14 @@ function Player() {
               <label className="flex items-center gap-2"><input type="checkbox" checked={sensory.showText} onChange={(e) => setSensory({ ...sensory, showText: e.target.checked })} /> Words</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={sensory.largeText} onChange={(e) => setSensory({ ...sensory, largeText: e.target.checked })} /> Big words</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={sensory.pacing === "normal"} onChange={(e) => setSensory({ ...sensory, pacing: e.target.checked ? "normal" : "slow" })} /> Go on by itself</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={!sensory.reducedMotion} onChange={(e) => setSensory({ ...sensory, reducedMotion: !e.target.checked })} /> Fades</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={!sensory.reducedMotion} onChange={(e) => setSensory({ ...sensory, reducedMotion: !e.target.checked })} /> Moving pictures</label>
             </div>
           )}
           <div className="flex flex-1 flex-col items-center justify-center gap-6 px-5 pb-6">
             <div className={`w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-md ${transition}`} key={sensory.reducedMotion ? undefined : i}>
-              {page.keyframe ? <img src={mediaUrl(page.keyframe.path)} alt="" className="aspect-video w-full object-cover" /> : <div className="grid aspect-video place-items-center text-[#5b554b]">No picture</div>}
+              {page.video && !sensory.reducedMotion ? (
+                <video key={page.video.path} src={mediaUrl(page.video.path)} className="aspect-video w-full object-cover" autoPlay muted loop playsInline poster={mediaUrl(page.keyframe?.path)} />
+              ) : page.keyframe ? <img src={mediaUrl(page.keyframe.path)} alt="" className="aspect-video w-full object-cover" /> : <div className="grid aspect-video place-items-center text-[#5b554b]">No picture</div>}
             </div>
             {sensory.showText && (
               <div className={`max-w-4xl text-center font-medium leading-snug ${textSize}`}>{page.words.join(" ")}</div>

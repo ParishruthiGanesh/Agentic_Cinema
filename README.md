@@ -107,10 +107,10 @@ After a `git pull` that changes `packages/core` or `apps/agent`, run `pnpm build
 | `GEMINI_TEXT_MODEL` | default `gemini-3.6-flash` |
 | `MEDIA_PROVIDER` | `gemini` or `placeholder` (labelled SVG storyboard cards, no video/audio). |
 | `GEMINI_IMAGE_MODEL`, `GEMINI_VIDEO_MODEL`, `GEMINI_TTS_MODEL` | defaults `gemini-3.1-flash-image`, `veo-3.1-fast-generate-preview`, `gemini-2.5-flash-preview-tts`. An `imagen-*` image model switches to the Imagen API. |
+| `FFMPEG_PATH` | optional; ffmpeg binary for the MP4 render (auto-detected on PATH or from `pip install imageio-ffmpeg`) |
 | `ENABLE_VIDEO_GENERATION` | `true` to call Veo (billable, slow). Keyframes and voice are generated regardless. |
 | `CINEMEMORY_DATA_DIR` | SQLite database + media directory (default `./data`). |
 | `REPAIR_MAX_ATTEMPTS` | Repair retries per violation before escalation (default 2). |
-| `FFMPEG_PATH` | Optional ffmpeg binary for rendering a single MP4 when every shot has a clip. |
 | `CLICKHOUSE_URL`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE` | ClickHouse production memory (ClickHouse Cloud or server; `http://127.0.0.1:8123` for the local engine). |
 | `PARTNER_ADAPTER` | `clickhouse` (default when `CLICKHOUSE_URL` is set) or `local` (development only). |
 | `CINEMEMORY_MCP` | set `false` to run the Producer agent without the ClickHouse MCP toolset. |

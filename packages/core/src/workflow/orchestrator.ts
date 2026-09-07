@@ -151,6 +151,7 @@ export function createProject(ctx: AgentContext, input: CreateProjectInput, opts
     socialStory: input.mode === "social_story" ? input.socialStory : undefined,
     childId: input.childId,
     revisionOf: input.revisionOf,
+    video: input.video ?? false,
     createdAt: now,
     updatedAt: now,
   };

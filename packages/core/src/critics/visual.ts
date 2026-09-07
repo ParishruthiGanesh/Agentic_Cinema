@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { lastFrame, resolveFfmpeg } from "../media/ffmpeg.js";
 import { CriticCollector, DETERMINISTIC, type CriticResult } from "./common.js";
 import type { LLMProvider } from "../llm/provider.js";
 import type { Shot, ShotPlan, VisualConstraint, WorldState } from "../model/index.js";
@@ -114,14 +115,30 @@ export async function runVisualCritic(world: WorldState, plan: ShotPlan, opts: V
       continue;
     }
     const expected = constraints.map((v) => `- [${v.id}] ${name(v.entityId)} (${v.entityType}) ${v.attribute}: ${v.value}`).join("\n");
+    // A clip can drift after its first frame: when the shot has a video and ffmpeg is available, the last frame is inspected too.
+    const images = [{ mimeType: shot.keyframe.mimeType, data: image.toString("base64") }];
+    let clipNote = "";
+    if (shot.video) {
+      const bin = await resolveFfmpeg();
+      if (bin) {
+        try {
+          const out = join(opts.mediaDir, shot.video.path.replace(/\.[a-z0-9]+$/i, "_last.jpg"));
+          await lastFrame(bin, join(opts.mediaDir, shot.video.path), out);
+          images.push({ mimeType: "image/jpeg", data: (await readFile(out)).toString("base64") });
+          clipNote = "\nTwo images are attached: the FIRST frame and the LAST frame of the clip. A constraint is satisfied only if it holds in BOTH; if the last frame drifted, mark it unsatisfied and say what changed.";
+        } catch {
+          /* no last frame: keyframe only */
+        }
+      }
+    }
     const res = await opts.llm.generateStructured({
       task: "visual_inspection",
       fixtureKey: `visual_inspection:${shot.id}`,
       system: INSPECT_SYSTEM,
-      prompt: `SHOT ${shot.id}: ${shot.framing}, ${shot.action}\nLocation: ${name(shot.locationId)}, ${shot.timeOfDay}\nCharacters: ${shot.characterIds.map(name).join(", ") || "none"}\nProps: ${shot.propIds.map(name).join(", ") || "none"}\n\nCONSTRAINTS TO VERIFY:\n${expected}\n\nInspect the attached keyframe and report one observation per constraint id.`,
+      prompt: `SHOT ${shot.id}: ${shot.framing}, ${shot.action}\nLocation: ${name(shot.locationId)}, ${shot.timeOfDay}\nCharacters: ${shot.characterIds.map(name).join(", ") || "none"}\nProps: ${shot.propIds.map(name).join(", ") || "none"}\n\nCONSTRAINTS TO VERIFY:\n${expected}${clipNote}\n\nInspect the attached image${images.length > 1 ? "s" : ""} and report one observation per constraint id.`,
       schema: InspectionOutput,
       temperature: 0,
-      images: [{ mimeType: shot.keyframe.mimeType, data: image.toString("base64") }],
+      images,
     });
     const byId = new Map(res.data.observations.map((o) => [o.constraintId, o]));
     for (const v of constraints) {

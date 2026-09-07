@@ -52,7 +52,9 @@ export class GeminiMediaProvider implements MediaGenerationProvider {
     this.ttsModel = opts.ttsModel ?? "gemini-2.5-flash-preview-tts";
     this.pollIntervalMs = opts.pollIntervalMs ?? 10_000;
     this.videoTimeoutMs = opts.videoTimeoutMs ?? 6 * 60_000;
-    this.capabilities = { image: true, video: !!opts.enableVideo, speech: true };
+    // Veo is available whenever Gemini is; whether a project actually asks for clips is decided per project (or ENABLE_VIDEO_GENERATION for all).
+    this.capabilities = { image: true, video: true, speech: true };
+    void opts.enableVideo;
   }
 
   async generateImage(req: ImageRequest): Promise<GeneratedMedia> {
@@ -98,13 +100,14 @@ export class GeminiMediaProvider implements MediaGenerationProvider {
   }
 
   async generateVideo(req: VideoRequest): Promise<GeneratedMedia> {
-    if (!this.capabilities.video) throw new MediaUnavailableError("Video generation is disabled (set ENABLE_VIDEO_GENERATION=true)");
     const started = Date.now();
+    // Veo clips are 4, 6 or 8 seconds; the voice track is laid over the clip at assembly, the clip may carry its own ambient audio, which is muted at assembly.
+    const durationSeconds = req.durationSec >= 8 ? 8 : req.durationSec >= 6 ? 6 : 4;
     let operation = await this.ai.models.generateVideos({
       model: this.videoModel,
       prompt: req.prompt,
       image: req.startImage ? { imageBytes: req.startImage.data, mimeType: req.startImage.mimeType } : undefined,
-      config: { aspectRatio: req.aspectRatio ?? "16:9", numberOfVideos: 1, negativePrompt: req.negativePrompt },
+      config: { aspectRatio: req.aspectRatio ?? "16:9", numberOfVideos: 1, negativePrompt: req.negativePrompt, durationSeconds },
     });
     while (!operation.done) {
       if (Date.now() - started > this.videoTimeoutMs) throw new MediaUnavailableError(`Veo operation timed out after ${this.videoTimeoutMs / 1000}s`);
@@ -113,7 +116,11 @@ export class GeminiMediaProvider implements MediaGenerationProvider {
     }
     if (operation.error) throw new MediaUnavailableError(`Veo error: ${JSON.stringify(operation.error)}`);
     const video = operation.response?.generatedVideos?.[0]?.video;
-    if (!video) throw new MediaUnavailableError("Veo returned no video");
+    if (!video) {
+      const r = operation.response as { raiMediaFilteredCount?: number; raiMediaFilteredReasons?: string[] } | undefined;
+      const why = r?.raiMediaFilteredCount ? `filtered by Veo's safety policy (${(r.raiMediaFilteredReasons ?? []).join("; ") || "no reason given"})` : "no video in the response";
+      throw new MediaUnavailableError(`Veo returned no video: ${why}`);
+    }
     let bytes: Uint8Array;
     if (video.videoBytes) bytes = Buffer.from(video.videoBytes, "base64");
     else if (video.uri) {
@@ -127,7 +134,7 @@ export class GeminiMediaProvider implements MediaGenerationProvider {
       kind: "video",
       mimeType: video.mimeType ?? "video/mp4",
       bytes,
-      durationSec: req.durationSec,
+      durationSec: durationSeconds,
       provenance: { provider: this.name, model: this.videoModel, task: "video", createdAt: new Date().toISOString(), latencyMs: Date.now() - started },
     };
   }

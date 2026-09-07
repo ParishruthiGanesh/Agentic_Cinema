@@ -191,9 +191,9 @@ export async function generateShotMedia(ctx: AgentContext, project: Project, sho
 
     // Video
     let video: MediaAsset | undefined;
-    if (media.capabilities.video && config.enableVideoGeneration && !opts.keyframeOnly) {
+    if (media.capabilities.video && (config.enableVideoGeneration || project.video) && !opts.keyframeOnly) {
       try {
-        const clip = await media.generateVideo({ prompt: shot.visualPrompt, negativePrompt: shot.negativePrompt, durationSec: shot.durationSec, aspectRatio: "16:9", startImage: image.mimeType.startsWith("image/") && image.mimeType !== "image/svg+xml" ? { mimeType: image.mimeType, data: Buffer.from(image.bytes).toString("base64") } : undefined });
+        const clip = await media.generateVideo({ prompt: videoPrompt(project, shot), negativePrompt: shot.negativePrompt, durationSec: shot.durationSec, aspectRatio: "16:9", startImage: image.mimeType.startsWith("image/") && image.mimeType !== "image/svg+xml" ? { mimeType: image.mimeType, data: Buffer.from(image.bytes).toString("base64") } : undefined });
         const videoPath = `${project.id}/${shotId}/clip_v${attempt}.${EXT[clip.mimeType] ?? "mp4"}`;
         await writeAsset(config.mediaDir, videoPath, clip.bytes);
         video = { kind: "video", path: videoPath, mimeType: clip.mimeType, durationSec: clip.durationSec, provenance: clip.provenance, prompt: shot.visualPrompt };
@@ -216,6 +216,63 @@ export async function generateShotMedia(ctx: AgentContext, project: Project, sho
     events.emit(project.id, "generation", "shot.generation.failed", `Shot ${shotId} generation failed: ${msg}`, { shotId, attempt }, "error");
     throw err;
   }
+}
+
+/** The clip starts from the verified keyframe; for social stories the motion must be minimal so nothing new appears. */
+export function videoPrompt(project: Project, shot: Shot): string {
+  const calm = project.mode === "social_story" ? " Very gentle, minimal motion only: small natural movements, slow breathing, a glance, a hand moving slightly. Static camera, no cuts, no zoom, nobody enters or leaves, nothing new appears, no text or captions." : "";
+  return `${shot.visualPrompt}${calm}`;
+}
+
+/**
+ * Add a moving clip to a shot that already has a verified keyframe (start frame = that keyframe), without redoing the
+ * picture or the voice. Used when a family asks for video after the pictures were approved, or to fill in clips.
+ */
+export async function generateShotVideo(ctx: AgentContext, project: Project, shotId: string): Promise<Shot> {
+  const { repo, media, events, config } = ctx;
+  const plan = repo.getShotPlan(project.id);
+  const shot = plan?.shots.find((s) => s.id === shotId);
+  if (!shot) throw new Error(`Shot ${shotId} not found`);
+  if (!shot.keyframe || shot.keyframe.provenance.provider === "placeholder") throw new MediaUnavailableError(`Shot ${shotId} has no generated keyframe to start the clip from`);
+  if (!media.capabilities.video) throw new MediaUnavailableError(`${media.name} cannot generate video`);
+  const attempt = shot.generationAttempts;
+  const t0 = Date.now();
+  events.emit(project.id, "generation", "shot.video.started", `Generating a clip for ${shotId} from its verified keyframe (${media.name})`, { shotId });
+  try {
+    const bytes = await readFile(join(config.mediaDir, shot.keyframe.path));
+    const clip = await media.generateVideo({ prompt: videoPrompt(project, shot), negativePrompt: shot.negativePrompt, durationSec: shot.durationSec, aspectRatio: "16:9", startImage: { mimeType: shot.keyframe.mimeType, data: bytes.toString("base64") } });
+    const videoPath = `${project.id}/${shotId}/clip_v${attempt}.${EXT[clip.mimeType] ?? "mp4"}`;
+    await writeAsset(config.mediaDir, videoPath, clip.bytes);
+    const video: MediaAsset = { kind: "video", path: videoPath, mimeType: clip.mimeType, durationSec: clip.durationSec, provenance: clip.provenance, prompt: videoPrompt(project, shot) };
+    await ctx.memory.recordGenerationAttempt({ projectId: project.id, shotId, attempt, kind: "video", provider: clip.provenance.provider, model: clip.provenance.model, path: videoPath, ok: true, latencyMs: clip.provenance.latencyMs ?? Date.now() - t0, createdAt: new Date().toISOString() }).catch(() => undefined);
+    const updated = setStatus(ctx, project.id, shotId, shot.status, { video });
+    await ctx.memory.recordShots(repo.getShotPlan(project.id)!).catch(() => undefined);
+    events.emit(project.id, "generation", "shot.video.generated", `${shotId} clip generated (${clip.provenance.model}, ${clip.durationSec ?? "?"}s, ${Math.round((Date.now() - t0) / 1000)}s)`, { shotId, path: videoPath, provenance: clip.provenance }, "success");
+    return updated;
+  } catch (e) {
+    await ctx.memory.recordGenerationAttempt({ projectId: project.id, shotId, attempt, kind: "video", provider: media.name, ok: false, error: (e as Error).message, latencyMs: Date.now() - t0, createdAt: new Date().toISOString() }).catch(() => undefined);
+    events.emit(project.id, "generation", "shot.video.failed", `${shotId} clip failed: ${(e as Error).message}`, { shotId }, "error");
+    throw e;
+  }
+}
+
+/** Clips for every shot that has a keyframe but no clip. Continues past individual failures and reports them. */
+export async function generateAllVideos(ctx: AgentContext, project: Project): Promise<{ generated: string[]; failed: Array<{ shotId: string; error: string }> }> {
+  const plan = ctx.repo.getShotPlan(project.id);
+  if (!plan) throw new Error("Shots must be planned before generation");
+  const generated: string[] = [];
+  const failed: Array<{ shotId: string; error: string }> = [];
+  for (const shot of plan.shots) {
+    if (shot.video || !shot.keyframe) continue;
+    try {
+      await generateShotVideo(ctx, project, shot.id);
+      generated.push(shot.id);
+    } catch (e) {
+      failed.push({ shotId: shot.id, error: (e as Error).message });
+    }
+  }
+  ctx.events.emit(project.id, "generation", "video.summary", `Clips: ${generated.length} generated, ${failed.length} failed`, { generated, failed }, failed.length ? "warn" : "success");
+  return { generated, failed };
 }
 
 /** Generate media for every shot that has none (or is PLANNED/FAILED). Continues past individual failures and reports them. */

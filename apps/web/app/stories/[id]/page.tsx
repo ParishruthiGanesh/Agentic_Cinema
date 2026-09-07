@@ -56,8 +56,9 @@ function Story({ id }: { id: string }) {
           <div className="mt-1 flex items-center gap-2 text-[#7a7264]">{status && <Badge code={status.code} label={status.label} />}<span className="text-sm">{p.socialStory?.steps.length} steps</span></div>
         </div>
         {status?.code === "approved" && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button href={`/watch/${id}`}>Watch with {p.socialStory?.child.name}</Button>
+            {summary.data?.videoPath && <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={mediaUrl(summary.data.videoPath)} download>Download the video</a>}
             <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={api.bookletUrl(id)} target="_blank" rel="noreferrer">Print</a>
           </div>
         )}
@@ -89,6 +90,13 @@ function Story({ id }: { id: string }) {
 
       {ready && c && (
         <>
+          {summary.data && summary.data.clips === 0 && (
+            <Card className="flex flex-wrap items-center justify-between gap-3">
+              <div><div className="font-semibold">Still pictures for now</div><div className="text-sm text-[#7a7264]">Add moving pictures: a gentle clip for each step, starting from its checked picture. Every clip is checked again, and you approve again afterwards.</div></div>
+              <Button kind="ghost" onClick={() => act(() => api.addVideo(id), "video")} disabled={busy === "video"}>{busy === "video" ? "Starting…" : "Add moving pictures"}</Button>
+            </Card>
+          )}
+          {summary.data && summary.data.clips > 0 && summary.data.videoPath && <div className="text-sm text-[#7a7264]">{summary.data.clips} of {c.steps.length} steps have a moving clip · one video file with the voice is ready.</div>}
           <Card className={c.status === "verified" ? "border-[#bfe0cb]" : "border-[#f1d38a]"}>
             <div className="text-lg font-semibold">{c.status === "verified" ? `Every picture was checked: same ${c.child}, same clothes, same rooms, nothing from the must-not list.` : "Some pictures need a look before approving."}</div>
             {c.reasons.length > 0 && <ul className="ml-4 mt-1 list-disc text-sm text-[#8a5a00]">{c.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}

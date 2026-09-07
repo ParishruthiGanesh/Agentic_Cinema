@@ -38,6 +38,7 @@ function Wizard() {
   const [mustNotShow, setMustNotShow] = useState<string[]>([]);
   const [calmingRules, setCalmingRules] = useState<string[]>([]);
   const [style, setStyle] = useState<"illustrated" | "photo">();
+  const [video, setVideo] = useState(true);
   const [photos, setPhotos] = useState<Record<string, { file: File; kind: "character" | "location" }>>({});
   const [feedback, setFeedback] = useState<Array<{ stepNumber: number; reaction: string; note?: string }>>([]);
   const [lint, setLint] = useState<LanguageReport>();
@@ -101,7 +102,7 @@ function Wizard() {
       // Photos for new people/places are stored on the profile first so future stories reuse them.
       const profileIds = new Set([...c.companions.map((p) => p.id), ...c.places.map((p) => p.id)]);
       const pending = Object.entries(photos).filter(([eid]) => !profileIds.has(eid));
-      const input: CreateStoryInput = { title: title || undefined, situation, steps, settings, companions, mustNotShow, calmingRules, style, revisionOf: from, authoredBy: c.guardian };
+      const input: CreateStoryInput = { title: title || undefined, situation, steps, settings, companions, mustNotShow, calmingRules, style, revisionOf: from, authoredBy: c.guardian, video };
       const created = await api.createStory(id, input);
       for (const [eid, { file, kind }] of pending) {
         const data = await fileToBase64(file);
@@ -227,8 +228,14 @@ function Wizard() {
             </div>
           </Card>
           <Card>
+            <label className="flex items-start gap-3">
+              <input type="checkbox" className="mt-1" checked={video} onChange={(e) => setVideo(e.target.checked)} />
+              <span><span className="font-semibold">Moving pictures</span><div className="text-sm text-[#7a7264]">Each step becomes a short, gentle clip that starts from its checked picture: small movements only, same people, same room. Takes a few minutes longer. Without this, each step is a still picture with the voice.</div></span>
+            </label>
+          </Card>
+          <Card>
             <Field label="Story title (optional)"><input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${c.name}: ${situation}`} /></Field>
-            <div className="mt-3 text-sm text-[#4d463b]">We will make one picture and the voice for each of the {steps.length} steps, then check every picture: same {c.name}, same clothes, same rooms, nothing from the must-not list. This takes a few minutes. You approve before {c.name} sees it.</div>
+            <div className="mt-3 text-sm text-[#4d463b]">We will make one picture{video ? ", a short clip" : ""} and the voice for each of the {steps.length} steps, then check every picture: same {c.name}, same clothes, same rooms, nothing from the must-not list. This takes a few minutes. You approve before {c.name} sees it.</div>
           </Card>
           <div className="flex justify-between">
             <Button kind="ghost" onClick={() => setPage(2)}>Back</Button>

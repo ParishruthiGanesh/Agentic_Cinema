@@ -38,6 +38,12 @@ Picture style is chosen per child on the profile: **Illustrated** (a calm drawin
 | **After the real visit** | The adult records times watched, how the visit went and a reaction per step. Stored with the story and in ClickHouse under the child. "Revise from feedback" opens the form preloaded with the story and the notes, and the new story records which one it revises. |
 | **Gemini composes each picture** | With a key, a Director call proposes the composition of every step from the retrieved state and the step text (static, eye level, whole figures, nothing added); the words, cast, props, outfit and must-not-show list stay locked and the Visual Critic verifies the result. Without a key, a literal composition from the step text is used and stamped as deterministic. |
 
+## Video
+
+A story can be still pictures with the voice, or **moving pictures**: a Veo clip (`veo-3.1-fast-generate-preview`, 4/6/8 s, 720p) for each step, generated from that step's verified keyframe with a "minimal motion, static camera, nothing new appears" prompt. The family opts in per story in the wizard, or adds clips later with "Add moving pictures"; that also invalidates the approval so the adult looks again. Each clip's **last frame** is inspected by the Visual Critic next to its first frame, so drift inside the clip is caught the same way as drift between pictures.
+
+The Assembler always renders **one MP4** when ffmpeg is available: each segment is the clip (frame held if the voice runs longer) or the still picture, with the voice track mixed in; the clip's own audio is dropped. `brew install ffmpeg` on a Mac, `pip install imageio-ffmpeg` anywhere, or set `FFMPEG_PATH`. The child player shows the clip (muted, looping) with the voice, unless the sensory profile says "no motion", in which case it shows the still picture.
+
 ## Where Gemini and ClickHouse are used
 
 - **Gemini** (`@google/genai`): optional first draft of the routine (`POST /api/social-stories/draft`, task `social_story_draft`); reference sheets and keyframes (`gemini-3.1-flash-image`, with uploaded photos as references when provided); voice (`gemini-2.5-flash-preview-tts`); vision inspection of every frame (`gemini-3.6-flash`, task `visual_inspection`).
