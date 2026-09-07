@@ -103,11 +103,12 @@ function Story({ id }: { id: string }) {
               <Button kind="ghost" onClick={() => act(() => api.addVideo(id), "video")} disabled={busy === "video"}>{busy === "video" ? "Starting…" : "Add moving pictures"}</Button>
             </Card>
           )}
-          {summary.data && summary.data.clips > 0 && summary.data.videoPath && <div className="text-sm text-[#7a7264]">{summary.data.clips} of {c.steps.length} steps have a moving clip · one video file with the voice is ready.</div>}
           <Card className={c.status === "verified" ? "border-[#bfe0cb]" : "border-[#f1d38a]"}>
-            <div className="text-lg font-semibold">{c.status === "verified" ? `Every picture was checked: same ${c.child}, same clothes, same rooms, nothing from the must-not list.` : "Some pictures need a look before approving."}</div>
-            {c.reasons.length > 0 && <ul className="ml-4 mt-1 list-disc text-sm text-[#8a5a00]">{c.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
-            <div className="mt-2 text-sm text-[#7a7264]">Words unchanged: {c.wordsUnchanged ? "yes" : "no"} · Order kept: {c.sequence.ordered ? "yes" : "no"} · Pictures fixed automatically: {c.totals.repaired}</div>
+            {c.status === "verified" ? (
+              <div className="text-lg font-semibold">All {c.steps.length} pictures match {c.child}, the clothes, the rooms and the must-not list.</div>
+            ) : (
+              <div className="text-lg font-semibold">Please look at {(() => { const bad = c.steps.filter((s) => !s.verified).map((s) => s.number); return bad.length ? `step${bad.length > 1 ? "s" : ""} ${bad.join(", ")}` : "the pictures"; })()} before approving.</div>
+            )}
           </Card>
 
           <div className="grid gap-4">
@@ -122,7 +123,6 @@ function Story({ id }: { id: string }) {
                       <span key={k} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${v.state === "pass" ? "bg-[#e3f2e8] text-[#2f7d4f]" : v.state === "fail" ? "bg-[#fde7e7] text-[#a13333]" : "bg-[#eee9dd] text-[#6b6355]"}`}>{CHECK_LABEL[k] ?? k} {v.state === "pass" ? "✓" : v.state === "fail" ? "✗" : "?"}</span>
                     ))}
                   </div>
-                  {s.keyframeVersions > 1 && <div className="mt-2 text-xs text-[#7a7264]">This picture was redrawn {s.keyframeVersions - 1} time{s.keyframeVersions > 2 ? "s" : ""} until it matched.</div>}
                 </div>
               </Card>
             ))}
