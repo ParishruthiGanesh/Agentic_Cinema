@@ -48,9 +48,9 @@ function FamilyShell({ children }: { children: React.ReactNode }) {
       <header className="border-b border-[#e6dfd0] bg-[#fbf8f1]">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#2f7d4f] text-base font-black text-white">S</span>
-            <span className="text-lg font-semibold">Story Ahead</span>
-            <span className="hidden text-sm text-[#7a7264] sm:inline">see what happens next, one calm picture at a time</span>
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#2f7d4f] text-base font-black text-white">P</span>
+            <span className="text-lg font-semibold">Preview Pal</span>
+            <span className="hidden text-sm text-[#7a7264] sm:inline">No surprises. Your child's day, pictured before it happens.</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm">
             {account ? (

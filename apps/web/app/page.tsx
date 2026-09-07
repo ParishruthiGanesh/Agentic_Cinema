@@ -22,8 +22,8 @@ function Landing() {
   return (
     <div className="grid gap-8 py-8 md:grid-cols-[1.2fr_1fr] md:items-center">
       <div>
-        <h1 className="text-4xl font-semibold leading-tight">See what happens next, one calm picture at a time.</h1>
-        <p className="mt-4 text-lg text-[#4d463b]">Social stories help autistic children get ready for the dentist, a haircut, a new school. Story Ahead turns the words you write into calm pictures, a gentle voice and a short film, keeps your child, their clothes, the rooms and the order exactly the same in every picture, and checks each one before your child sees it.</p>
+        <h1 className="text-4xl font-semibold leading-tight">No surprises. Your child's day, pictured before it happens.</h1>
+        <p className="mt-4 text-lg text-[#4d463b]">Social stories help autistic children get ready for the dentist, a haircut, a new school. Preview Pal turns the words you write into calm pictures, a gentle voice and a short film, keeps your child, their clothes, the rooms and the order exactly the same in every picture, and checks each one before your child sees it.</p>
         <div className="mt-6 flex gap-3">
           <Button href="/signin">Sign in or create an account</Button>
         </div>
