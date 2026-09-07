@@ -62,7 +62,7 @@ export interface ProjectSummary {
   lastEvent?: WorkflowEvent;
   videoPath?: string;
   clips: number;
-  story?: { code: "writing" | "drawing" | "checking" | "needs_approval" | "approved" | "failed" | "not_started"; label: string; detail: string };
+  story?: { code: "writing" | "drawing" | "moving" | "checking" | "needs_approval" | "approved" | "failed" | "not_started"; label: string; detail: string };
   coverPath?: string;
 }
 

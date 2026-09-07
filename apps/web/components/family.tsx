@@ -21,6 +21,7 @@ export const STATUS_TONE: Record<string, string> = {
   needs_approval: "bg-[#fff3d6] text-[#8a5a00]",
   checking: "bg-[#e7effa] text-[#2b5c9e]",
   drawing: "bg-[#e7effa] text-[#2b5c9e]",
+  moving: "bg-[#e7effa] text-[#2b5c9e]",
   writing: "bg-[#e7effa] text-[#2b5c9e]",
   failed: "bg-[#fde7e7] text-[#a13333]",
   not_started: "bg-[#eee9dd] text-[#6b6355]",

@@ -24,7 +24,7 @@ function Story({ id }: { id: string }) {
   const summary = useResource(() => api.project(id), [id], 4000);
   const p = summary.data?.project;
   const status = summary.data?.story;
-  const inProgress = status && ["writing", "drawing", "checking"].includes(status.code);
+  const inProgress = status && ["writing", "drawing", "moving", "checking"].includes(status.code);
   const ready = status && (status.code === "needs_approval" || status.code === "approved");
   const cert = useResource(ready ? () => api.certificate(id) : null, [id, status?.code]);
   const [approver, setApprover] = useState("");
@@ -40,7 +40,8 @@ function Story({ id }: { id: string }) {
       await fn();
       await Promise.all([summary.refresh(), cert.refresh()]);
     } catch (e) {
-      setError((e as Error).message);
+      const m = (e as Error).message;
+      setError(/already running/i.test(m) ? "Still working on this story. Give it a few minutes; this page updates by itself." : m);
     } finally {
       setBusy(undefined);
     }
@@ -55,6 +56,12 @@ function Story({ id }: { id: string }) {
           <h1 className="text-3xl font-semibold">{p.title}</h1>
           <div className="mt-1 flex items-center gap-2 text-[#7a7264]">{status && <Badge code={status.code} label={status.label} />}<span className="text-sm">{p.socialStory?.steps.length} steps</span></div>
         </div>
+        {status?.code === "needs_approval" && (
+          <div className="flex flex-wrap gap-2">
+            <Button kind="ghost" href={`/watch/${id}?preview=1`}>Preview (adults only)</Button>
+            {summary.data?.videoPath && <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={mediaUrl(summary.data.videoPath)} download>Download the video</a>}
+          </div>
+        )}
         {status?.code === "approved" && (
           <div className="flex flex-wrap gap-2">
             <Button href={`/watch/${id}`}>Watch with {p.socialStory?.child.name}</Button>
@@ -176,6 +183,7 @@ function Story({ id }: { id: string }) {
 }
 
 function Progress({ code }: { code: string }) {
+  if (code === "moving") return <div className="mt-4 text-xs text-[#7a7264]">Each step gets a short clip, then every clip is checked and the video file is built. You can approve again when it is done.</div>;
   const stages = ["writing", "drawing", "checking"];
   const idx = stages.indexOf(code);
   return (

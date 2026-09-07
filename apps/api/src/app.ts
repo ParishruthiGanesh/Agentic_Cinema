@@ -93,7 +93,7 @@ export function projectSummary(ctx: AgentContext, project: Project, jobs?: JobRu
     durationSec: screenplay?.totalDurationSec,
     film: !!ctx.repo.getFilm(project.id),
     lastEvent: ctx.repo.listEvents(project.id).slice(-1)[0],
-    story: project.mode === "social_story" ? storyStatus(project, { running: !!jobs?.current(project.id), jobError: jobs?.recent(project.id)[0]?.error }) : undefined,
+    story: project.mode === "social_story" ? storyStatus(project, { running: !!jobs?.current(project.id), jobKind: jobs?.current(project.id)?.kind, jobError: jobs?.recent(project.id)[0]?.error }) : undefined,
     videoPath: ctx.repo.getFilm(project.id)?.renderedVideo?.path,
     clips: ctx.repo.getShotPlan(project.id)?.shots.filter((s) => s.video).length ?? 0,
     coverPath: ctx.repo.getShotPlan(project.id)?.shots.find((s) => s.keyframe && s.keyframe.provenance.provider !== "placeholder")?.keyframe?.path,

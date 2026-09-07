@@ -1,10 +1,11 @@
 import type { Project } from "../model/index.js";
 
-export type StoryStatusCode = "writing" | "drawing" | "checking" | "needs_approval" | "approved" | "failed" | "not_started";
+export type StoryStatusCode = "writing" | "drawing" | "moving" | "checking" | "needs_approval" | "approved" | "failed" | "not_started";
 
 /** Plain-words status for families and therapists; the studio keeps the stage names. */
-export function storyStatus(project: Project, opts: { running?: boolean; jobError?: string } = {}): { code: StoryStatusCode; label: string; detail: string } {
+export function storyStatus(project: Project, opts: { running?: boolean; jobKind?: string; jobError?: string } = {}): { code: StoryStatusCode; label: string; detail: string } {
   const failed = project.stages.find((s) => s.status === "failed");
+  if (opts.running && opts.jobKind === "generate") return { code: "moving", label: "Making the moving pictures", detail: "About a minute per step. Then every clip is checked, first frame and last, and the video file is built." };
   if (failed && !opts.running) return { code: "failed", label: "Something went wrong", detail: failed.error ?? opts.jobError ?? "Try again, or contact support." };
   if (project.approval) return { code: "approved", label: "Ready to watch", detail: `Approved by ${project.approval.approvedBy}` };
   const stage = project.stage;
