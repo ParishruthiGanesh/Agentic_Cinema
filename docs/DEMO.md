@@ -93,6 +93,19 @@ The before/after frames are kept as versions (`data/media/lumi_demo/shot_2_2/key
 
 Same key, same day, the Lumi film needed 4 visual repairs. The social story needed none: locking one outfit, static shots and reference sheets removes most of the drift before it happens, and the certificate is the proof that it was checked rather than assumed. Approval was left unsigned on purpose; the therapist or parent signs on the Certificate page.
 
+### Second story from the same profile: "Maya gets a haircut" (measured live, 2026-09-07)
+
+Created from Maya's child profile through the API (identity, outfit, Bun, Mum and the hallway inherited; the salon and the hairdresser Sam added for this story), with the Gemini Director composing each step.
+
+| Step | Result |
+|---|---|
+| Story path | 4 steps → 4 scenes → 4 shots; composition by `gemini-3.6-flash` per step under the locks (static, eye level, whole figures); one Director output was rejected by the pre-image validator for naming a must-not-show item and re-requested |
+| Media | 3 reference sheets + 4 keyframes + 4 voice tracks, 0 failed |
+| Vision inspection | 96 media-level checks, 0 violations on the first pass |
+| Certificate | `verified`: 120/120 checks, words unchanged, order kept, plain-language critic 6/6 clean |
+| Cross-story consistency | Maya, her outfit, Bun and Mum are visually the same as in the dentist story without restating them |
+| Wall time | 2 min 22 s from planning to film |
+
 ## ClickHouse in the demo
 
 With `CLICKHOUSE_URL` set, the same run writes ~600 rows across 14 tables for this production. The Memory page shows the tables, the SQL each agent ran, and the knowledge timeline (`lumi @ scene 3`, `milo @ scene 5`). Selecting "before scene 4" in the retrieval explorer shows exactly the rows the Narrative Critic used to flag Milo's line, and the violation history for Scene 4 (`KNOWLEDGE_TIMELINE_VIOLATION · resolved · 1 repair attempt`).
