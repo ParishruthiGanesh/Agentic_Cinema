@@ -106,6 +106,10 @@ Created from Maya's child profile through the API (identity, outfit, Bun, Mum an
 | Cross-story consistency | Maya, her outfit, Bun and Mum are visually the same as in the dentist story without restating them |
 | Wall time | 2 min 22 s from planning to film |
 
+### Moving pictures (measured live, 2026-09-07)
+
+"Add moving pictures" on the finished dentist story: a Veo clip (`veo-3.1-fast-generate-preview`, 8 s, 720p) per step from its verified keyframe, about 50–60 s each. First pass: 5 of 7 clips (one empty response, one Veo internal error); the retry filled both. The Visual Critic then inspected the first **and last** frame of every clip: two clips had drifted by the end (Bun's nose colour in step 4; in step 7 Bun ends up covering the star on Maya's t-shirt). The Repair Agent regenerates only the clip for in-clip drift. The Assembler rendered one MP4 (1 min 43 s, 7 clips, voice mixed in, clip audio dropped) with ffmpeg.
+
 ## ClickHouse in the demo
 
 With `CLICKHOUSE_URL` set, the same run writes ~600 rows across 14 tables for this production. The Memory page shows the tables, the SQL each agent ran, and the knowledge timeline (`lumi @ scene 3`, `milo @ scene 5`). Selecting "before scene 4" in the retrieval explorer shows exactly the rows the Narrative Critic used to flag Milo's line, and the violation history for Scene 4 (`KNOWLEDGE_TIMELINE_VIOLATION · resolved · 1 repair attempt`).
