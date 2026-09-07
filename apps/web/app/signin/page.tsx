@@ -91,9 +91,7 @@ export default function SignInPage() {
             <div className="mb-2 text-center text-xs text-[#7a7264]">or</div>
             <div ref={gButton} className="flex justify-center" />
           </div>
-        ) : (
-          <div className="mt-4 text-xs text-[#a59d8c]">Google sign-in appears here when the server has a Google client id configured.</div>
-        )}
+        ) : null}
       </Card>
       <div className="mt-4 text-center text-sm text-[#7a7264]">
         {mode === "signin" ? (
