@@ -60,13 +60,14 @@ function Story({ id }: { id: string }) {
           <div className="flex flex-wrap gap-2">
             <Button kind="ghost" href={`/watch/${id}?preview=1`}>Preview (adults only)</Button>
             {summary.data?.videoPath && <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={mediaUrl(summary.data.videoPath)} download>Download the video</a>}
+            <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={api.bookletUrl(id)} target="_blank" rel="noreferrer">Download as PDF</a>
           </div>
         )}
         {status?.code === "approved" && (
           <div className="flex flex-wrap gap-2">
             <Button href={`/watch/${id}`}>Watch with {p.socialStory?.child.name}</Button>
             {summary.data?.videoPath && <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={mediaUrl(summary.data.videoPath)} download>Download the video</a>}
-            <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={api.bookletUrl(id)} target="_blank" rel="noreferrer">Print</a>
+            <a className="inline-flex items-center rounded-xl border border-[#c9c1b1] bg-white px-4 py-2.5 text-sm font-semibold" href={api.bookletUrl(id)} target="_blank" rel="noreferrer">Download as PDF</a>
           </div>
         )}
       </div>
