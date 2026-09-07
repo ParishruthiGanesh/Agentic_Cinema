@@ -23,6 +23,8 @@ import {
   generateShotMedia,
   generateAllVideos,
   assembleFilm,
+  applyVerificationToShots,
+  repairAll,
   listCharacterReferences,
   listLocationReferences,
   StoryOutcomeInput,
@@ -480,6 +482,12 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
       const p = ctx.repo.getProject(project.id)!;
       await generateAllVideos(ctx, p);
       await runVerification(ctx, p, { critics: ["visual"] });
+      const open = ctx.repo.listViolations(p.id).filter((v) => v.status === "open" && v.critic === "visual");
+      if (open.length) {
+        const r = await repairAll(ctx, p, ["visual"]);
+        ctx.events.emit(p.id, "repair", "repair.summary", `Clip repair pass: ${r.attempted.length} attempted, ${r.resolved.length} resolved, ${r.escalated.length} escalated`, { ...r }, r.escalated.length ? "warn" : "success");
+      }
+      applyVerificationToShots(ctx, p.id);
       await assembleFilm(ctx, p);
     });
     return c.json(job, 202);

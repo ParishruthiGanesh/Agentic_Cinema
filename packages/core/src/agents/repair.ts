@@ -6,7 +6,7 @@ import { retrieveSceneContext } from "../memory/worldMemory.js";
 import { Scene, type Project, type RepairAttempt, type Violation, type ViolationCode, type WorldState } from "../model/index.js";
 import { runVerification } from "../workflow/verification.js";
 import { LLMQuotaError } from "../llm/provider.js";
-import { generateShotMedia } from "../media/generation.js";
+import { generateShotMedia, generateShotVideo } from "../media/generation.js";
 
 type RootCause = RepairAttempt["rootCause"];
 
@@ -182,8 +182,17 @@ export async function repairViolation(ctx: AgentContext, project: Project, viola
         const shotId = v.scope.shotId;
         const shot = repo.getShotPlan(project.id)?.shots.find((s) => s.id === shotId);
         if (!shot) throw new Error("shot missing");
-        await generateShotMedia(ctx, project, shot.id, { reason: `repair ${v.code}` });
-        attempt.detail = `${r.detail}; media regenerated`;
+        // Drift inside a clip (the keyframe passed before the clip existed): the first attempt regenerates only the clip from the
+        // same verified keyframe; a second failure regenerates the picture, the voice and the clip.
+        const clipOnly = !!shot.video && attempt.attempt === 1 && /frame 2|last frame|second image/i.test(v.evidence + " " + v.observed);
+        if (clipOnly) {
+          attempt.strategy = "regenerate clip from the verified keyframe";
+          await generateShotVideo(ctx, project, shot.id);
+          attempt.detail = `${r.detail}; clip regenerated from the same keyframe`;
+        } else {
+          await generateShotMedia(ctx, project, shot.id, { reason: `repair ${v.code}` });
+          attempt.detail = `${r.detail}; media regenerated`;
+        }
         await runVerification(ctx, project, { critics: ["visual"] });
       } else {
         throw new Error(`No repair strategy for ${v.code}`);
