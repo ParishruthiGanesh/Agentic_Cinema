@@ -3,7 +3,7 @@ import type { AgentContext } from "../agents/context.js";
 import { memoryLabel } from "../agents/context.js";
 import { buildShots, type ScenePlanOutput } from "../agents/director.js";
 import { keywordsFromFact } from "../agents/sourceIntelligence.js";
-import { retrieveSceneContext } from "../memory/worldMemory.js";
+import { renderSceneContext, retrieveSceneContext } from "../memory/worldMemory.js";
 import {
   AdaptationPlan,
   Screenplay,
@@ -299,15 +299,36 @@ export function wordsUnchanged(brief: SocialStoryBrief, screenplay: Screenplay):
   });
 }
 
+/** What the Director may decide for a social story step: composition only. Camera, cast, props, words and duration are fixed. */
+export const SocialShotOutput = z.object({
+  framing: z.string().describe("eye-level framing that keeps every figure whole, e.g. 'medium wide, eye level'"),
+  action: z.string().describe("what each person is doing at this exact moment, literally"),
+  visualPromptDraft: z.string().describe("the picture: composition, where each person and item is, the room, calm expressions"),
+  lighting: z.string(),
+  positionNotes: z.array(z.object({ characterId: z.string(), note: z.string() })),
+});
+
+export const SOCIAL_DIRECTOR_SYSTEM = `You are the Director of CineMemory composing ONE picture for ONE step of a social story for an autistic child.
+The child will rehearse this picture before the real day, so it must show exactly what the words say and nothing more.
+
+Rules:
+- One static shot at the child's eye level. Whole figures visible, faces visible and calm. No close-ups, no dramatic angles, no motion blur.
+- Show exactly the people and items listed, doing exactly what the step text says. Do not add characters, objects, signs, text or decorations that are not in the step or the setting description.
+- Uncluttered, literal, calm. Everyone relaxed. The same faces, clothes and rooms as described (they are locked).
+- Never depict anything on the MUST NOT SHOW list, not even in the background.
+- Describe composition only: where each person and item is, what they hold, where they look. Do not rewrite or paraphrase the child's words into dialogue; they are fixed.`;
+
 /**
- * Deterministic shot planning for social stories: one calm, static, eye-level shot per step. The Director LLM is
- * deliberately not used here because reinterpretation (a dramatic close-up, a new angle, an added detail) is the
- * thing a social story must avoid. Prompt composition, memory retrieval and constraints are the same as for films.
+ * Shot planning for social stories: one calm, static, eye-level shot per step. With a Gemini key the Director
+ * proposes the composition for each step from the step text, the setting and the state retrieved from memory;
+ * words, camera, cast, props, outfit and the must-not-show list stay locked and are injected/verified afterwards.
+ * Without a key (development fixture mode) a literal composition is derived from the step text and stamped as such.
  */
 export async function runSocialStoryDirector(ctx: AgentContext, project: Project, brief: SocialStoryBrief, world: WorldState, screenplay: Screenplay): Promise<ShotPlan> {
-  const { events, repo, memory } = ctx;
+  const { events, repo, memory, llm } = ctx;
   const style = project.brief.visualStyle || DEFAULT_SOCIAL_STORY_STYLE;
-  events.emit(project.id, "director", "shots.planning.started", `Planning ${screenplay.scenes.length} social-story shots (one static eye-level shot per step; deterministic)`, { injectMemory: true, memory: memory.name, deterministic: true });
+  const useModel = llm.name !== "fixture";
+  events.emit(project.id, "director", "shots.planning.started", `Planning ${screenplay.scenes.length} social-story shots (one static eye-level shot per step; composition by ${useModel ? `${llm.name} ${llm.model}` : "deterministic rule (no model key)"})`, { injectMemory: true, memory: memory.name, provider: useModel ? llm.name : "deterministic" });
   const shots: ShotPlan["shots"] = [];
   for (const scene of [...screenplay.scenes].sort((a, b) => a.number - b.number)) {
     const step = brief.steps[scene.number - 1];
@@ -316,27 +337,48 @@ export async function runSocialStoryDirector(ctx: AgentContext, project: Project
     const sceneCtx = retrieveSceneContext(world, screenplay, changes, scene.id);
     events.emit(project.id, "world_memory", "memory.retrieved", `Retrieved step ${scene.number} state from ${memoryLabel(ctx)}: ${trace.rows} state changes for ${entityIds.length} entities (${trace.latencyMs}ms) → ${sceneCtx.visualConstraints.length} visual constraints`, { sceneId: scene.id, source: trace.source, sql: trace.sql, rows: trace.rows, latencyMs: trace.latencyMs });
     const who = sceneCtx.characters.map((c) => c.character.name).join(" and ");
-    const draft = step?.visual ?? `${who} ${scene.title.toLowerCase()}. ${step?.text ?? ""}`;
-    const out: ScenePlanOutput = {
-      shots: [
-        {
-          index: 1,
-          durationSec: scene.durationSec,
-          framing: "medium wide shot at the child's eye level, whole figures visible",
-          cameraMovement: "static",
-          characterIds: scene.characterIds,
-          propIds: scene.propIds,
-          lighting: "soft, even daylight, no harsh shadows",
-          action: draft,
-          lineIndexes: scene.lines.map((_, i) => i),
-          visualPromptDraft: `${draft} A calm, literal picture of exactly this moment and nothing else; everyone relaxed; faces fully visible.`,
-          positionNotes: [],
-        },
-      ],
+    const literal = step?.visual ?? `${who} ${scene.title.toLowerCase()}. ${step?.text ?? ""}`;
+    let composition: z.infer<typeof SocialShotOutput> = {
+      framing: "medium wide shot at the child's eye level, whole figures visible",
+      action: literal,
+      visualPromptDraft: `${literal} A calm, literal picture of exactly this moment and nothing else; everyone relaxed; faces fully visible.`,
+      lighting: "soft, even daylight, no harsh shadows",
+      positionNotes: [],
     };
-    const sceneShots = buildShots(project, sceneCtx, out, { injectMemory: true, visualStyle: style, avoid: brief.mustNotShow }, { ...SOCIAL_STORY_PROVENANCE, task: "shot_planning", createdAt: new Date().toISOString(), note: SOCIAL_STORY_NOTE });
+    let provenance = { ...SOCIAL_STORY_PROVENANCE, task: "shot_planning", createdAt: new Date().toISOString(), note: SOCIAL_STORY_NOTE } as ShotPlan["shots"][number]["provenance"];
+    if (useModel) {
+      const chars = new Set(scene.characterIds);
+      const schema = SocialShotOutput.superRefine((o, zctx) => {
+        o.positionNotes.forEach((n, i) => !chars.has(n.characterId) && zctx.addIssue({ code: "custom", path: ["positionNotes", i], message: `"${n.characterId}" is not in this step` }));
+        // A composition may only mention a forbidden item to negate it ("no razors"); a positive mention is rejected before any image is made.
+        const draft = o.visualPromptDraft.toLowerCase();
+        for (const item of brief.mustNotShow) {
+          const phrase = item.toLowerCase().replace(/\s+or\s+/g, "|").split("|").map((x) => x.trim()).filter(Boolean);
+          for (const ph of phrase) {
+            const idx = draft.indexOf(ph);
+            if (idx < 0) continue;
+            const before = draft.slice(Math.max(0, idx - 12), idx);
+            if (!/\b(no|without|not)\s*$/.test(before)) zctx.addIssue({ code: "custom", path: ["visualPromptDraft"], message: `must not depict "${ph}" (on the must-not-show list)` });
+          }
+        }
+      });
+      const result = await llm.generateStructured({
+        task: "shot_planning",
+        fixtureKey: `shot_planning:${scene.id}`,
+        system: SOCIAL_DIRECTOR_SYSTEM,
+        prompt: `SOCIAL STORY: ${brief.child.name}: ${brief.situation}. Style "${style}", aspect 16:9.\n${renderSceneContext(sceneCtx)}\nSTEP ${scene.number} TEXT (fixed, first person, spoken by ${brief.child.name}): "${step?.text ?? ""}"\n${step?.visual ? `PICTURE NOTE FROM THE AUTHOR: ${step.visual}\n` : ""}PEOPLE IN THIS STEP: ${sceneCtx.characters.map((c) => `${c.character.name} (${c.character.id})`).join(", ")}\nITEMS: ${sceneCtx.props.map((p) => p.name).join(", ") || "none"}\nMUST NOT SHOW: ${brief.mustNotShow.join("; ") || "nothing listed"}\n\nCompose the single static picture for this step as JSON.`,
+        schema,
+        temperature: 0.3,
+      });
+      composition = result.data;
+      provenance = result.provenance;
+    }
+    const out: ScenePlanOutput = {
+      shots: [{ index: 1, durationSec: scene.durationSec, framing: composition.framing, cameraMovement: "static", characterIds: scene.characterIds, propIds: scene.propIds, lighting: composition.lighting, action: composition.action, lineIndexes: scene.lines.map((_, i) => i), visualPromptDraft: composition.visualPromptDraft, positionNotes: composition.positionNotes }],
+    };
+    const sceneShots = buildShots(project, sceneCtx, out, { injectMemory: true, visualStyle: style, avoid: brief.mustNotShow }, provenance);
     shots.push(...sceneShots);
-    events.emit(project.id, "director", "shots.scene.planned", `Step ${scene.number} planned: ${sceneShots.length} shot`, { sceneId: scene.id, shotIds: sceneShots.map((s) => s.id) });
+    events.emit(project.id, "director", "shots.scene.planned", `Step ${scene.number} composed by ${provenance.provider}${provenance.model ? `/${provenance.model}` : ""}: ${sceneShots[0].framing}`, { sceneId: scene.id, shotIds: sceneShots.map((s) => s.id), provenance, composition: composition.visualPromptDraft });
   }
   const previous = repo.getShotPlan(project.id);
   const plan: ShotPlan = { projectId: project.id, shots, version: (previous?.version ?? 0) + 1, updatedAt: new Date().toISOString() };

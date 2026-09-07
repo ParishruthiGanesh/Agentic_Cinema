@@ -79,14 +79,20 @@ const UPLOAD_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
  * Personalised references: a parent or therapist uploads a photo/drawing of the child (or a companion) and it replaces
  * the generated reference sheet as the identity anchor for every shot with that character.
  */
-export async function saveUploadedReference(ctx: AgentContext, project: Project, characterId: string, file: { mimeType: string; data: string }, uploadedBy?: string): Promise<CharacterReference> {
+export async function saveUploadedReference(ctx: AgentContext, project: Project, characterId: string, file: { mimeType: string; data: string }, uploadedBy?: string, kind: "character" | "location" = "character"): Promise<CharacterReference> {
   const { repo, config, events } = ctx;
   const world = repo.getWorld(project.id);
   const brief = project.socialStory;
-  const known = world
-    ? world.characters.some((c) => c.id === characterId)
-    : !!brief && (slugify(brief.child.name) === characterId || brief.companions.some((c) => c.id === characterId));
-  if (!known) throw new Error(`Character ${characterId} is not part of this project${world ? "" : " (run source analysis first)"}`);
+  const known =
+    kind === "location"
+      ? world
+        ? world.locations.some((l) => l.id === characterId)
+        : !!brief && brief.settings.some((s) => s.id === characterId)
+      : world
+        ? world.characters.some((c) => c.id === characterId)
+        : !!brief && (slugify(brief.child.name) === characterId || brief.companions.some((c) => c.id === characterId));
+  if (!known) throw new Error(`${kind === "location" ? "Setting" : "Character"} ${characterId} is not part of this project${world ? "" : " (run source analysis first)"}`);
+  const collection = kind === "location" ? "location_refs" : "character_refs";
   if (!UPLOAD_MIME.has(file.mimeType)) throw new Error(`Unsupported image type ${file.mimeType} (use PNG, JPEG or WebP)`);
   const bytes = Buffer.from(file.data, "base64");
   if (bytes.length === 0) throw new Error("Empty image");
@@ -94,17 +100,22 @@ export async function saveUploadedReference(ctx: AgentContext, project: Project,
   const path = `${project.id}/references/${characterId}_upload.${EXT[file.mimeType] ?? "bin"}`;
   await writeAsset(config.mediaDir, path, bytes);
   const ref: CharacterReference = { characterId, path, mimeType: file.mimeType, prompt: "(uploaded reference image)", provenance: { provider: "upload", model: "user-photo", task: "reference", createdAt: new Date().toISOString(), note: UPLOAD_NOTE } };
-  repo.store.put("character_refs", project.id, characterId, ref);
+  repo.store.put(collection, project.id, characterId, ref);
   await ctx.memory.recordGenerationAttempt({ projectId: project.id, shotId: `ref:${characterId}`, attempt: 1, kind: "reference", provider: "upload", model: "user-photo", path, ok: true, createdAt: new Date().toISOString() }).catch(() => undefined);
-  const name = world?.characters.find((c) => c.id === characterId)?.name ?? characterId;
-  events.emit(project.id, "user", "character.reference.uploaded", `Reference photo uploaded for ${name}${uploadedBy ? ` by ${uploadedBy}` : ""} (${Math.round(bytes.length / 1024)} KB); it now anchors every keyframe with ${name}`, { characterId, path, bytes: bytes.length });
+  const name = (kind === "location" ? world?.locations.find((l) => l.id === characterId)?.name : world?.characters.find((c) => c.id === characterId)?.name) ?? characterId;
+  events.emit(project.id, "user", kind === "location" ? "location.reference.uploaded" : "character.reference.uploaded", `${kind === "location" ? "Photo of the real place" : "Reference photo"} uploaded for ${name}${uploadedBy ? ` by ${uploadedBy}` : ""} (${Math.round(bytes.length / 1024)} KB); it now anchors every keyframe ${kind === "location" ? "set there" : `with ${name}`}`, { characterId, kind, path, bytes: bytes.length });
   return ref;
 }
 
-export function removeCharacterReference(ctx: AgentContext, projectId: string, characterId: string): boolean {
-  const existing = ctx.repo.store.get<CharacterReference>("character_refs", projectId, characterId);
+export function listLocationReferences(ctx: AgentContext, projectId: string): CharacterReference[] {
+  return ctx.repo.store.list<CharacterReference>("location_refs", projectId);
+}
+
+export function removeCharacterReference(ctx: AgentContext, projectId: string, characterId: string, kind: "character" | "location" = "character"): boolean {
+  const collection = kind === "location" ? "location_refs" : "character_refs";
+  const existing = ctx.repo.store.get<CharacterReference>(collection, projectId, characterId);
   if (!existing) return false;
-  ctx.repo.store.delete("character_refs", projectId, characterId);
+  ctx.repo.store.delete(collection, projectId, characterId);
   ctx.events.emit(projectId, "user", "character.reference.removed", `Reference for ${characterId} removed (${existing.provenance.provider}); the next generation will create a new reference sheet`, { characterId });
   return true;
 }
@@ -131,20 +142,20 @@ export async function generateShotMedia(ctx: AgentContext, project: Project, sho
   events.emit(project.id, "generation", "shot.generation.started", `Generating ${shotId}${opts.reason ? ` (${opts.reason})` : ""} with ${media.name}`, { shotId, attempt, provider: media.name });
 
   try {
-    // Keyframe
+    // Keyframe: identity references for every character, plus a real-place reference for the setting when one was uploaded.
     const references = [] as Array<{ mimeType: string; data: string; label: string }>;
-    for (const cid of shot.characterIds) {
-      const ref = repo.store.get<CharacterReference>("character_refs", project.id, cid);
-      // Placeholder cards are not real references; only pass model-generated images.
-      if (ref && ref.provenance.provider !== "placeholder") {
-        try {
-          const bytes = await readFile(join(config.mediaDir, ref.path));
-          references.push({ mimeType: ref.mimeType, data: bytes.toString("base64"), label: world?.characters.find((c) => c.id === cid)?.name ?? cid });
-        } catch {
-          /* missing reference is fine */
-        }
+    const addRef = async (ref: CharacterReference | undefined, label: string) => {
+      // Placeholder cards are not real references; only pass model-generated or uploaded images.
+      if (!ref || ref.provenance.provider === "placeholder") return;
+      try {
+        const bytes = await readFile(join(config.mediaDir, ref.path));
+        references.push({ mimeType: ref.mimeType, data: bytes.toString("base64"), label });
+      } catch {
+        /* missing reference is fine */
       }
-    }
+    };
+    for (const cid of shot.characterIds) await addRef(repo.store.get<CharacterReference>("character_refs", project.id, cid), world?.characters.find((c) => c.id === cid)?.name ?? cid);
+    await addRef(repo.store.get<CharacterReference>("location_refs", project.id, shot.locationId), `the real place: ${world?.locations.find((l) => l.id === shot.locationId)?.name ?? shot.locationId} (match this room)`);
     const t0 = Date.now();
     let image: Awaited<ReturnType<typeof media.generateImage>>;
     try {

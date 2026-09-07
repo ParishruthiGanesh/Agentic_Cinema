@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import type { CreateProjectInput } from "@cinememory/core";
 import { api } from "@/lib/api";
 import { PageTitle } from "@/components/ui";
@@ -14,8 +14,19 @@ const KIDS_EXAMPLE = {
 };
 
 export default function NewProjectPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewProjectInner />
+    </Suspense>
+  );
+}
+
+function NewProjectInner() {
   const router = useRouter();
-  const [mode, setMode] = useState<"creator" | "kids" | "social_story">("creator");
+  const search = useSearchParams();
+  const childId = search.get("child") ?? undefined;
+  const fromProjectId = search.get("from") ?? undefined;
+  const [mode, setMode] = useState<"creator" | "kids" | "social_story">(childId || fromProjectId ? "social_story" : "creator");
   const [title, setTitle] = useState("");
   const [sourceKind, setSourceKind] = useState<CreateProjectInput["source"]["kind"]>("original");
   const [sourceTitle, setSourceTitle] = useState("");
@@ -99,7 +110,7 @@ export default function NewProjectPage() {
           {mode === "creator" ? "Original stories, public-domain text, licensed material, screenplays or ideas. Real actors are never generated; characters are fictional or authorised likenesses." : mode === "kids" ? "Lessons, concepts or facts. Required facts are tracked as source constraints and verified in the final screenplay." : "A step-by-step preview of a situation for an autistic child, written by a therapist or parent. Words are used verbatim; identity, outfit, rooms, comfort items and forbidden content are locked and verified in every picture."}
         </p>
       </div>
-      {mode === "social_story" ? <SocialStoryForm /> : (
+      {mode === "social_story" ? <SocialStoryForm childId={childId} fromProjectId={fromProjectId} /> : (
       <form onSubmit={submit} className="grid gap-5">
 
         <div className="card grid gap-3 p-4">

@@ -1,11 +1,13 @@
 import type {
   CheckRecord,
+  ChildProfile,
   EvalComparison,
   Provenance,
   RepairAttempt,
   Screenplay,
   ShotPlan,
   StateChange,
+  StoryOutcome,
   Violation,
   WorkflowEvent,
   WorldState,
@@ -106,6 +108,9 @@ export interface ProductionMemory {
   recordGenerationAttempt(attempt: GenerationAttemptRecord): Promise<void>;
   recordRepairAttempt(projectId: string, violationId: string, attempt: RepairAttempt): Promise<void>;
   recordEvaluation(comparison: EvalComparison): Promise<void>;
+  /** Social stories: the child's canonical profile (versioned) and what happened after the real visit. */
+  recordChildProfile(profile: ChildProfile): Promise<void>;
+  recordOutcome(outcome: StoryOutcome): Promise<void>;
 
   /* read side: what agents reason with */
   stateBefore(projectId: string, sceneNumber: number, entityIds?: string[]): Promise<{ changes: StateChange[]; trace: MemoryTrace }>;
@@ -178,6 +183,8 @@ export class LocalProductionMemory implements ProductionMemory {
   }
   async recordRepairAttempt(): Promise<void> {}
   async recordEvaluation(): Promise<void> {}
+  async recordChildProfile(): Promise<void> {}
+  async recordOutcome(): Promise<void> {}
 
   async stateBefore(projectId: string, sceneNumber: number, entityIds?: string[]) {
     const { value, latencyMs } = timed(() => this.repo.listStateChanges(projectId).filter((c) => c.sceneNumber < sceneNumber && (!entityIds || entityIds.includes(c.entityId))));

@@ -1,6 +1,12 @@
 import type {
   AdaptationPlan,
+  ChildPhoto,
+  ChildProfile,
+  ChildProfileInput,
   ContinuityCertificate,
+  LanguageReport,
+  StoryOutcome,
+  StoryOutcomeInput,
   SocialStoryBrief,
   SocialStoryDraft,
   CheckRecord,
@@ -104,6 +110,13 @@ export interface Health {
   partnerHealth: { ok: boolean; adapter: string; detail?: string };
 }
 
+export interface ChildDetail {
+  child: ChildProfile;
+  stories: Array<ProjectSummary & { outcomes: StoryOutcome[] }>;
+  photos: ChildPhoto[];
+  history: { stories: Array<{ project_id: string; violations: string; repairs: string; last: string }>; outcomes: Array<{ project_id: string; visit_outcome: string; times_watched: string; anxious_steps: number[]; recorded_at: string }>; profileVersions?: { n: string; first: string; last: string }; traces: MemoryTrace[] } | null;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -136,6 +149,21 @@ export const api = {
   certificate: (id: string) => request<ContinuityCertificate>(`/api/projects/${id}/certificate`),
   approve: (id: string, input: { approvedBy: string; note?: string; force?: boolean }) => request<{ project: Project; certificate: ContinuityCertificate }>(`/api/projects/${id}/approve`, { method: "POST", body: JSON.stringify(input) }),
   revokeApproval: (id: string) => request<Project>(`/api/projects/${id}/approve`, { method: "DELETE" }),
+  locationReferences: (id: string) => request<Array<{ characterId: string; path: string; mimeType: string; provenance: { provider: string; model?: string; note?: string } }>>(`/api/projects/${id}/references?kind=location`),
+  uploadLocationReference: (id: string, locationId: string, file: { mimeType: string; data: string }) => request<{ characterId: string; path: string }>(`/api/projects/${id}/references/${locationId}`, { method: "POST", body: JSON.stringify({ ...file, kind: "location" }) }),
+  removeLocationReference: (id: string, locationId: string) => request<{ removed: boolean }>(`/api/projects/${id}/references/${locationId}?kind=location`, { method: "DELETE" }),
+  lintSocialStory: (input: { steps: Array<{ text: string }>; calmingRules: string[] }) => request<LanguageReport>("/api/social-stories/lint", { method: "POST", body: JSON.stringify(input) }),
+  outcomes: (id: string) => request<StoryOutcome[]>(`/api/projects/${id}/outcomes`),
+  recordOutcome: (id: string, input: StoryOutcomeInput) => request<StoryOutcome>(`/api/projects/${id}/outcomes`, { method: "POST", body: JSON.stringify(input) }),
+  revisionSeed: (id: string) => request<{ brief: SocialStoryBrief; notes: Array<{ stepNumber: number; reaction: string; note?: string; recordedAt: string }>; outcomes: StoryOutcome[] }>(`/api/projects/${id}/revision-seed`),
+  children: () => request<Array<ChildProfile & { stories: number; photos: number }>>("/api/children"),
+  child: (id: string) => request<ChildDetail>(`/api/children/${id}`),
+  saveChild: (input: ChildProfileInput) => request<ChildProfile>("/api/children", { method: "POST", body: JSON.stringify(input) }),
+  updateChild: (id: string, input: ChildProfileInput) => request<ChildProfile>(`/api/children/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+  deleteChild: (id: string) => request<{ ok: true }>(`/api/children/${id}`, { method: "DELETE" }),
+  uploadChildPhoto: (id: string, entityId: string, file: { mimeType: string; data: string; kind: "character" | "location" }) => request<ChildPhoto>(`/api/children/${id}/photos/${entityId}`, { method: "POST", body: JSON.stringify(file) }),
+  removeChildPhoto: (id: string, entityId: string) => request<{ removed: boolean }>(`/api/children/${id}/photos/${entityId}`, { method: "DELETE" }),
+  bookletUrl: (id: string) => `${API_URL}/api/projects/${id}/booklet.pdf`,
   deleteProject: (id: string) => request<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" }),
   run: (id: string, toStage?: Stage, force = false) => request<Job>(`/api/projects/${id}/run`, { method: "POST", body: JSON.stringify({ toStage, force }) }),
   reset: (id: string, stage: Stage) => request<Project>(`/api/projects/${id}/reset`, { method: "POST", body: JSON.stringify({ stage }) }),

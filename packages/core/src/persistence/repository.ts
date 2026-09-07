@@ -2,6 +2,8 @@ import type { DocumentStore } from "./documentStore.js";
 import {
   AdaptationPlan,
   CheckRecord,
+  ChildProfile,
+  StoryOutcome,
   CriticRun,
   EvalComparison,
   FilmManifest,
@@ -27,7 +29,12 @@ export const COLLECTIONS = {
   criticRuns: "critic_runs",
   evaluations: "evaluations",
   film: "film",
+  children: "child_profiles",
+  outcomes: "story_outcomes",
 } as const;
+
+/** Child profiles are not tied to one production; they live under a fixed pseudo-project id. */
+export const CHILDREN_SCOPE = "_children";
 
 const SINGLETON = "current";
 
@@ -171,6 +178,33 @@ export class Repository {
   saveEvaluation(e: EvalComparison): void {
     this.store.put(COLLECTIONS.evaluations, e.projectId, e.id, EvalComparison.parse(e));
   }
+  /* children (social stories) */
+  listChildren(): ChildProfile[] {
+    return this.store
+      .list<ChildProfile>(COLLECTIONS.children, CHILDREN_SCOPE)
+      .map((c) => ChildProfile.parse(c))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  getChild(id: string): ChildProfile | undefined {
+    const raw = this.store.get<ChildProfile>(COLLECTIONS.children, CHILDREN_SCOPE, id);
+    return raw ? ChildProfile.parse(raw) : undefined;
+  }
+  saveChild(c: ChildProfile): void {
+    this.store.put(COLLECTIONS.children, CHILDREN_SCOPE, c.id, ChildProfile.parse({ ...c, updatedAt: new Date().toISOString() }));
+  }
+  deleteChild(id: string): void {
+    this.store.delete(COLLECTIONS.children, CHILDREN_SCOPE, id);
+  }
+  listOutcomes(projectId: string): StoryOutcome[] {
+    return this.store
+      .list<StoryOutcome>(COLLECTIONS.outcomes, projectId)
+      .map((o) => StoryOutcome.parse(o))
+      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+  }
+  saveOutcome(o: StoryOutcome): void {
+    this.store.put(COLLECTIONS.outcomes, o.projectId, o.id, StoryOutcome.parse(o));
+  }
+
   getFilm(projectId: string): FilmManifest | undefined {
     const raw = this.store.get<FilmManifest>(COLLECTIONS.film, projectId, SINGLETON);
     return raw ? FilmManifest.parse(raw) : undefined;

@@ -8,3 +8,4 @@ export * from "./violation.js";
 export * from "./event.js";
 export * from "./evaluation.js";
 export * from "./film.js";
+export * from "./child.js";

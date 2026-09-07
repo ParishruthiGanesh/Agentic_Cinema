@@ -14,11 +14,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cinememory/agent": "workspace:*",
     "@cinememory/core": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "hono": "^4.6.0",
-    "zod": "^4.0.0",
-    "@cinememory/agent": "workspace:*"
+    "pdf-lib": "1.17.1",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

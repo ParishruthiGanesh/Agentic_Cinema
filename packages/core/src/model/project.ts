@@ -146,6 +146,10 @@ export const Project = z.object({
   /** Present for mode "social_story". */
   socialStory: SocialStoryBrief.optional(),
   approval: Approval.optional(),
+  /** Child profile this story was created from (social stories). */
+  childId: Id.optional(),
+  /** Earlier story this one revises (after feedback). */
+  revisionOf: Id.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -158,6 +162,8 @@ export const CreateProjectInput = z
     source: SourceMaterial,
     brief: ProductionBrief,
     socialStory: SocialStoryBrief.optional(),
+    childId: Id.optional(),
+    revisionOf: Id.optional(),
   })
   .superRefine((input, ctx) => {
     if (input.mode === "social_story" && !input.socialStory) ctx.addIssue({ code: "custom", path: ["socialStory"], message: "mode social_story requires a socialStory brief" });

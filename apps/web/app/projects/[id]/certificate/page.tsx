@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { ContinuityCertificate } from "@cinememory/core";
+import type { ContinuityCertificate, StoryOutcomeInput } from "@cinememory/core";
 import { useProject } from "@/components/ProjectProvider";
 import { Empty, PageTitle, Pill, Provenance, Section, Spinner, Stat } from "@/components/ui";
 import { api, mediaUrl } from "@/lib/api";
@@ -23,6 +23,7 @@ export default function CertificatePage() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [outcome, setOutcome] = useState<StoryOutcomeInput>({ recordedBy: "", timesWatched: 1, visitOutcome: "went_well", notes: "", stepNotes: [] });
   const p = summary.data?.project;
   if (p && p.mode !== "social_story") return <Empty title="Certificates are for social stories" hint="This project is a film project. Open the Continuity Command Center for its verification record." action={<Link href={`/projects/${id}/continuity`} className="btn-primary">Continuity</Link>} />;
   if (cert.error && !cert.data) return <div className="text-sm text-rose-glow">{cert.error}</div>;
@@ -47,7 +48,14 @@ export default function CertificatePage() {
       <PageTitle
         title="Continuity Certificate"
         subtitle={<>{c.child}: {c.situation}{c.authoredBy ? ` · written by ${c.authoredBy}` : ""} · generated {c.generatedAt.slice(0, 19).replace("T", " ")}</>}
-        actions={<span className={`rounded-lg border px-3 py-1.5 text-sm font-semibold uppercase tracking-wide ${STATUS_STYLE[c.status]}`}>{c.status}</span>}
+        actions={
+          <>
+            <a className="btn-ghost !py-1 !text-xs" href={api.bookletUrl(id)} target="_blank" rel="noreferrer">Booklet PDF</a>
+            <Link className="btn-ghost !py-1 !text-xs" href={`/watch/${id}${c.approvalValid ? "" : "?preview=1"}`}>{c.approvalValid ? "Open child player" : "Preview child player"}</Link>
+            {c.childId && <Link className="btn-ghost !py-1 !text-xs" href={`/children/${c.childId}`}>Child profile</Link>}
+            <span className={`rounded-lg border px-3 py-1.5 text-sm font-semibold uppercase tracking-wide ${STATUS_STYLE[c.status]}`}>{c.status}</span>
+          </>
+        }
       />
       {c.reasons.length > 0 && (
         <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${c.status === "issues" ? "border-rose-glow/40 bg-rose-glow/5 text-rose-glow" : "border-amber-glow/40 bg-amber-glow/5 text-amber-soft"}`}>
@@ -129,10 +137,49 @@ export default function CertificatePage() {
             )}
             {error && <div className="mt-2 text-xs text-rose-glow">{error}</div>}
           </Section>
+          <Section title="Plain language" aside={<span className={`text-xs ${c.language.summary.findings ? "text-amber-glow" : "text-lime-glow"}`}>{c.language.summary.stepsClean}/{c.language.summary.steps} clean</span>}>
+            {c.language.findings.length === 0 ? <div className="text-xs text-ink-400">First person, short sentences, present tense, no idioms, one idea per step.</div> : (
+              <ul className="space-y-1 text-xs">{c.language.findings.map((f, i) => <li key={i} className={f.severity === "medium" ? "text-amber-soft" : "text-ink-300"}>step {f.step}: {f.message}</li>)}</ul>
+            )}
+            <div className="mt-1 text-[11px] text-ink-400">Advice, not a block: the adult owns the words.</div>
+          </Section>
+          <Section title="After the real visit">
+            {c.outcomes.length > 0 && (
+              <ul className="mb-3 space-y-1 text-xs">
+                {c.outcomes.map((o) => <li key={o.id} className={`rounded px-2 py-1 ${o.visitOutcome === "went_well" ? "bg-lime-glow/10 text-lime-glow" : "bg-amber-glow/10 text-amber-soft"}`}>{o.recordedAt.slice(0, 10)} · {o.visitOutcome.replace(/_/g, " ")} · watched {o.timesWatched}× · {o.recordedBy}{o.notes ? ` · ${o.notes}` : ""}{o.stepNotes.length ? ` · ${o.stepNotes.map((n) => `step ${n.stepNumber} ${n.reaction}${n.note ? ` (${n.note})` : ""}`).join(", ")}` : ""}</li>)}
+              </ul>
+            )}
+            <div className="grid gap-2 text-sm">
+              <input className="input" placeholder="Your name" value={outcome.recordedBy} onChange={(e) => setOutcome({ ...outcome, recordedBy: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-ink-300">Times watched<input className="input" type="number" min={0} value={outcome.timesWatched} onChange={(e) => setOutcome({ ...outcome, timesWatched: Number(e.target.value) })} /></label>
+                <label className="text-xs text-ink-300">The visit<select className="input" value={outcome.visitOutcome} onChange={(e) => setOutcome({ ...outcome, visitOutcome: e.target.value as StoryOutcomeInput["visitOutcome"] })}><option value="went_well">went well</option><option value="some_difficulty">some difficulty</option><option value="difficult">difficult</option><option value="did_not_happen">did not happen</option></select></label>
+              </div>
+              <div className="grid gap-1">
+                {c.steps.map((s) => {
+                  const n = outcome.stepNotes.find((x) => x.stepNumber === s.number);
+                  return (
+                    <div key={s.number} className="flex items-center gap-2 text-xs">
+                      <span className="w-24 truncate text-ink-300">{s.number}. {s.title}</span>
+                      <select className="input !w-auto !py-0.5" value={n?.reaction ?? ""} onChange={(e) => { const r = e.target.value as "calm" | "unsure" | "anxious" | ""; setOutcome({ ...outcome, stepNotes: [...outcome.stepNotes.filter((x) => x.stepNumber !== s.number), ...(r ? [{ stepNumber: s.number, reaction: r, note: n?.note }] : [])] }); }}>
+                        <option value="">–</option><option value="calm">calm</option><option value="unsure">unsure</option><option value="anxious">anxious</option>
+                      </select>
+                      {n && <input className="input !py-0.5" placeholder="note" value={n.note ?? ""} onChange={(e) => setOutcome({ ...outcome, stepNotes: outcome.stepNotes.map((x) => (x.stepNumber === s.number ? { ...x, note: e.target.value } : x)) })} />}
+                    </div>
+                  );
+                })}
+              </div>
+              <input className="input" placeholder="Notes (optional)" value={outcome.notes ?? ""} onChange={(e) => setOutcome({ ...outcome, notes: e.target.value })} />
+              <div className="flex gap-2">
+                <button className="btn-primary !py-1" disabled={busy || !outcome.recordedBy} onClick={() => act(() => api.recordOutcome(id, outcome).then(() => setOutcome({ recordedBy: outcome.recordedBy, timesWatched: 1, visitOutcome: "went_well", notes: "", stepNotes: [] })))}>Record outcome</button>
+                {c.outcomes.length > 0 && <Link className="btn-ghost !py-1" href={`/projects/new?from=${id}${c.childId ? `&child=${c.childId}` : ""}`}>Revise story from feedback</Link>}
+              </div>
+            </div>
+          </Section>
           <Section title="Identity references">
             {c.media.references.length === 0 ? <div className="text-xs text-ink-400">None yet. Reference sheets are generated before the first picture; you can upload a photo on the Characters page instead.</div> : (
               <ul className="space-y-1 text-xs">
-                {c.media.references.map((r) => <li key={r.characterId} className="flex items-center justify-between"><span className="text-ink-100">{r.name}</span><span className={r.provider === "upload" ? "text-teal-glow" : "text-ink-400"}>{r.provider === "upload" ? "uploaded photo" : `${r.provider}${r.model ? ` · ${r.model}` : ""}`}</span></li>)}
+                {c.media.references.map((r) => <li key={`${r.kind}-${r.characterId}`} className="flex items-center justify-between"><span className="text-ink-100">{r.name}{r.kind === "location" ? <span className="ml-1 text-ink-400">(place)</span> : null}</span><span className={r.provider === "upload" ? "text-teal-glow" : "text-ink-400"}>{r.provider === "upload" ? "uploaded photo" : `${r.provider}${r.model ? ` · ${r.model}` : ""}`}</span></li>)}
               </ul>
             )}
           </Section>

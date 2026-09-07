@@ -149,6 +149,8 @@ export function createProject(ctx: AgentContext, input: CreateProjectInput, opts
     mediaProvider: ctx.media.name,
     isDemo: opts.isDemo ?? false,
     socialStory: input.mode === "social_story" ? input.socialStory : undefined,
+    childId: input.childId,
+    revisionOf: input.revisionOf,
     createdAt: now,
     updatedAt: now,
   };

@@ -11,6 +11,7 @@ export default function CharactersPage() {
   const world = useResource(() => api.world(id), [id, live.tick]);
   const screenplay = useResource(() => api.screenplay(id), [id, live.tick]);
   const refs = useResource(() => api.references(id), [id, live.tick]);
+  const locRefs = useResource(() => api.locationReferences(id), [id, live.tick]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string>();
   const w = world.data;
@@ -33,6 +34,19 @@ export default function CharactersPage() {
     try {
       await api.removeReference(id, cid);
       await refs.refresh();
+    } finally {
+      setBusy(null);
+    }
+  };
+  const uploadPlace = async (lid: string, file?: File) => {
+    if (!file) return;
+    setBusy(lid);
+    setError(undefined);
+    try {
+      await api.uploadLocationReference(id, lid, await fileToBase64(file));
+      await locRefs.refresh();
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setBusy(null);
     }
@@ -106,6 +120,34 @@ export default function CharactersPage() {
                 </div>
                 <Row k="Scenes" v={c.scene_appearances.length ? c.scene_appearances.map((s) => `S${sceneNum(s) ?? "?"}`).join(", ") : "not yet placed"} />
                 {c.sourceEvidence && <div className="border-t border-ink-700/60 pt-2 text-xs italic text-ink-400">“{c.sourceEvidence}”</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Places w={w} refs={locRefs.data ?? []} busy={busy} upload={uploadPlace} remove={(lid) => api.removeLocationReference(id, lid).then(() => locRefs.refresh())} />
+    </div>
+  );
+}
+
+function Places({ w, refs, busy, upload, remove }: { w: { locations: Array<{ id: string; name: string; description: string }> }; refs: Array<{ characterId: string; path: string; provenance: { provider: string; model?: string; note?: string } }>; busy: string | null; upload: (id: string, f?: File) => void; remove: (id: string) => void }) {
+  return (
+    <div className="mt-6">
+      <div className="label mb-2">Places · upload a photo of the real room and every picture set there will match it</div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {w.locations.map((l) => {
+          const ref = refs.find((r) => r.characterId === l.id);
+          return (
+            <div key={l.id} className="card overflow-hidden">
+              {ref && <div className="relative aspect-video bg-ink-950"><img src={mediaUrl(ref.path)} alt={l.name} className="h-full w-full object-cover" /><div className="absolute bottom-2 left-2"><Provenance p={ref.provenance} /></div></div>}
+              <div className="p-3 text-sm">
+                <div className="font-semibold text-ink-100">{l.name}</div>
+                <div className="text-xs text-ink-300">{l.description}</div>
+                <div className="mt-2 flex items-center gap-2 text-[11px] text-ink-400">
+                  <label className="cursor-pointer text-amber-glow hover:underline">{ref ? "Replace photo" : "Upload photo of the real place"}<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={busy === l.id} onChange={(e) => upload(l.id, e.target.files?.[0])} /></label>
+                  {ref && <button className="text-rose-glow hover:underline" onClick={() => remove(l.id)}>remove</button>}
+                  {busy === l.id && <span>working…</span>}
+                </div>
               </div>
             </div>
           );

@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import type { CreateProjectInput, SocialStoryBrief, SocialStoryDraft } from "@cinememory/core";
+import { useEffect, useState } from "react";
+import type { CreateProjectInput, LanguageReport, SocialStoryBrief, SocialStoryDraft } from "@cinememory/core";
 import { api, fileToBase64 } from "@/lib/api";
 import { Section, Spinner } from "./ui";
 
@@ -30,9 +31,45 @@ const empty: SocialStoryBrief = {
  * Social story authoring form. The adult's words are used verbatim by the pipeline; Gemini only helps with a first
  * draft (optional) and later with pictures. Photos are optional and become identity references for generation.
  */
-export function SocialStoryForm() {
+export function SocialStoryForm({ childId, fromProjectId }: { childId?: string; fromProjectId?: string } = {}) {
   const router = useRouter();
   const [b, setB] = useState<SocialStoryBrief>(empty);
+  const [childName, setChildName] = useState<string>();
+  const [notes, setNotes] = useState<Array<{ stepNumber: number; reaction: string; note?: string; recordedAt: string }>>([]);
+  const [lint, setLint] = useState<LanguageReport>();
+  const [settingPhotos, setSettingPhotos] = useState<Record<string, File>>({});
+  const [loadError, setLoadError] = useState<string>();
+
+  // Preload from a child profile (identity locked) and/or from an earlier story's feedback.
+  useEffect(() => {
+    (async () => {
+      try {
+        let next: SocialStoryBrief | undefined;
+        if (childId) {
+          const d = await api.child(childId);
+          const c = d.child;
+          setChildName(c.name);
+          next = { ...empty, child: { name: c.name, age: c.age, appearance: c.appearance, outfit: c.outfit }, companions: c.companions, comfortItems: c.comfortItems, settings: c.places, mustNotShow: c.mustNotShow, calmingRules: c.calmingRules, authoredBy: c.guardian ?? "" };
+        }
+        if (fromProjectId) {
+          const seed = await api.revisionSeed(fromProjectId);
+          next = { ...(next ?? empty), ...seed.brief, child: next?.child ?? seed.brief.child };
+          setNotes(seed.notes);
+          setTitle((t) => t || `${seed.brief.child.name}: ${seed.brief.situation} (revised)`);
+        }
+        if (next) setB(next);
+      } catch (e) {
+        setLoadError((e as Error).message);
+      }
+    })();
+  }, [childId, fromProjectId]);
+
+  // Plain-language critic runs on the words as they are typed (debounced).
+  useEffect(() => {
+    if (!b.steps.length) return setLint(undefined);
+    const t = setTimeout(() => api.lintSocialStory({ steps: b.steps.map((s) => ({ text: s.text })), calmingRules: b.calmingRules }).then(setLint).catch(() => undefined), 600);
+    return () => clearTimeout(t);
+  }, [b.steps, b.calmingRules]);
   const [title, setTitle] = useState("");
   const [style, setStyle] = useState(DEFAULT_STYLE);
   const [language, setLanguage] = useState("English");
@@ -103,12 +140,19 @@ export function SocialStoryForm() {
         source: { kind: "social_story", title: `${brief.child.name}: ${brief.situation} (routine)`, author: brief.authoredBy, text },
         brief: { genre: "social story", audience: "an autistic child", ageRange: brief.child.age, targetDurationSec: Math.max(30, brief.steps.length * 12), language, visualStyle: style || DEFAULT_STYLE, tone: "calm, literal, reassuring", format: "social story film", requiredFacts: [] },
         socialStory: brief,
+        childId,
+        revisionOf: fromProjectId,
       };
       const s = await api.createProject(input);
       for (const [cid, file] of Object.entries(photos)) {
         setBusy(`Uploading photo for ${cid}…`);
         const data = await fileToBase64(file);
         await api.uploadReference(s.project.id, cid, { ...data, uploadedBy: brief.authoredBy });
+      }
+      for (const [lid, file] of Object.entries(settingPhotos)) {
+        setBusy(`Uploading photo of ${lid}…`);
+        const data = await fileToBase64(file);
+        await api.uploadLocationReference(s.project.id, lid, data);
       }
       setBusy("Starting pipeline…");
       await api.run(s.project.id, "narrative_verified").catch(() => undefined);
@@ -130,15 +174,27 @@ export function SocialStoryForm() {
         </div>
       </div>
 
+      {loadError && <div className="text-sm text-rose-glow">{loadError}</div>}
+      {childId && (
+        <div className="rounded-lg border border-violet-glow/40 bg-violet-glow/5 px-4 py-2 text-sm text-ink-200">
+          Story for <span className="font-semibold text-ink-100">{childName ?? childId}</span>: look, outfit, comfort items, familiar people and places come from the <Link href={`/children/${childId}`} className="text-amber-glow underline">profile</Link> and are locked here. Add what is new for this situation.
+        </div>
+      )}
+      {notes.length > 0 && (
+        <div className="rounded-lg border border-amber-glow/40 bg-amber-glow/5 px-4 py-2 text-sm">
+          <div className="font-semibold text-amber-soft">Feedback from the last version</div>
+          <ul className="ml-4 list-disc text-ink-200">{notes.map((n, i) => <li key={i}>Step {n.stepNumber}: {n.reaction}{n.note ? ` — ${n.note}` : ""} <span className="text-xs text-ink-400">({n.recordedAt.slice(0, 10)})</span></li>)}</ul>
+        </div>
+      )}
       <Section title="The child and the situation">
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Child's name"><input className="input" value={b.child.name} onChange={(e) => set({ child: { ...b.child, name: e.target.value } })} required /></Field>
-          <Field label="Age (optional)"><input className="input" value={b.child.age ?? ""} onChange={(e) => set({ child: { ...b.child, age: e.target.value } })} /></Field>
+          <Field label="Child's name"><input className="input" value={b.child.name} onChange={(e) => set({ child: { ...b.child, name: e.target.value } })} required readOnly={!!childId} /></Field>
+          <Field label="Age (optional)"><input className="input" value={b.child.age ?? ""} onChange={(e) => set({ child: { ...b.child, age: e.target.value } })} readOnly={!!childId} /></Field>
           <Field label="Situation (e.g. going to the dentist for a check-up)"><input className="input" value={b.situation} onChange={(e) => set({ situation: e.target.value })} required /></Field>
           <Field label="Story title (optional)"><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={b.child.name ? `${b.child.name}: ${b.situation}` : ""} /></Field>
-          <Field label="How the child looks (hair, skin, features — this is locked for every picture)"><textarea className="input min-h-[60px]" value={b.child.appearance} onChange={(e) => set({ child: { ...b.child, appearance: e.target.value } })} required /></Field>
-          <Field label="The ONE outfit for the whole story (exactly what they will wear on the day)"><textarea className="input min-h-[60px]" value={b.child.outfit} onChange={(e) => set({ child: { ...b.child, outfit: e.target.value } })} required /></Field>
-          <Field label={`Photo of ${b.child.name || "the child"} (optional; stays on your server, used only as the identity reference)`}><input type="file" accept="image/png,image/jpeg,image/webp" className="text-xs text-ink-300" onChange={(e) => setPhoto(e.target.files?.[0], childKey)} /></Field>
+          <Field label="How the child looks (hair, skin, features — this is locked for every picture)"><textarea className="input min-h-[60px]" value={b.child.appearance} onChange={(e) => set({ child: { ...b.child, appearance: e.target.value } })} required readOnly={!!childId} /></Field>
+          <Field label="The ONE outfit for the whole story (exactly what they will wear on the day)"><textarea className="input min-h-[60px]" value={b.child.outfit} onChange={(e) => set({ child: { ...b.child, outfit: e.target.value } })} required readOnly={!!childId} /></Field>
+          {!childId && <Field label={`Photo of ${b.child.name || "the child"} (optional; stays on your server, used only as the identity reference)`}><input type="file" accept="image/png,image/jpeg,image/webp" className="text-xs text-ink-300" onChange={(e) => setPhoto(e.target.files?.[0], childKey)} /></Field>}
           <Field label="Written by (shown on the certificate)"><input className="input" value={b.authoredBy ?? ""} onChange={(e) => set({ authoredBy: e.target.value })} placeholder="e.g. J. Okafor, speech and language therapist" /></Field>
         </div>
       </Section>
@@ -159,6 +215,7 @@ export function SocialStoryForm() {
               <input className="input" placeholder="Name (e.g. Waiting room)" value={s.name} onChange={(e) => update("settings", i, { name: e.target.value, id: s.id.startsWith("setting_") || s.id === slug(s.name) ? slug(e.target.value) || s.id : s.id })} required />
               <input className="input" placeholder="What it looks like (colours, furniture, what is on the walls)" value={s.description} onChange={(e) => update("settings", i, { description: e.target.value })} required />
               <button type="button" className="btn-danger !py-1 !text-xs" onClick={() => remove("settings", i)}>Remove</button>
+              <label className="text-xs text-ink-400 md:col-span-3">Photo of the real place (optional; the picture will match this room) <input type="file" accept="image/png,image/jpeg,image/webp" className="ml-2 text-xs" onChange={(e) => setSettingPhotos((prev) => { const n = { ...prev }; if (e.target.files?.[0]) n[s.id] = e.target.files[0]; else delete n[s.id]; return n; })} /></label>
             </div>
           ))}
         </div>
@@ -226,6 +283,16 @@ export function SocialStoryForm() {
         </ol>
       </Section>
 
+      {lint && (
+        <Section title="Plain-language check" aside={<span className={`text-xs ${lint.summary.findings ? "text-amber-glow" : "text-lime-glow"}`}>{lint.summary.findings ? `${lint.summary.findings} suggestion${lint.summary.findings === 1 ? "" : "s"}` : "all steps read clearly"}</span>}>
+          {lint.findings.length === 0 ? <div className="text-xs text-ink-400">First person, short sentences, present tense, no idioms or negatives, one idea per step.</div> : (
+            <ul className="space-y-1 text-xs">
+              {lint.findings.map((f, i) => <li key={i} className={f.severity === "medium" ? "text-amber-soft" : "text-ink-300"}><span className="font-mono">step {f.step}</span> · {f.message} <span className="italic text-ink-400">“{f.excerpt}”</span></li>)}
+            </ul>
+          )}
+          <div className="mt-1 text-[11px] text-ink-400">Advice only: your words are used as written.</div>
+        </Section>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <Section title="Must never be shown (one per line)">
           <textarea className="input min-h-[90px]" value={b.mustNotShow.join("\n")} onChange={(e) => set({ mustNotShow: lines(e.target.value) })} placeholder={"needles or syringes\ndental drills\ncrying or frightened faces"} />

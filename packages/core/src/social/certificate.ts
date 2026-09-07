@@ -1,6 +1,8 @@
 import type { AgentContext } from "../agents/context.js";
 import type { CheckRecord, MediaAsset, Project, Violation, VisualConstraint } from "../model/index.js";
 import { wordsUnchanged } from "./compile.js";
+import { checkPlainLanguage, type LanguageReport } from "./language.js";
+import type { StoryOutcome } from "../model/index.js";
 
 export type CertificateStatus = "verified" | "issues" | "incomplete";
 export type CheckCategory = "identity" | "outfit" | "setting" | "comfort_items" | "forbidden" | "style";
@@ -42,7 +44,10 @@ export interface ContinuityCertificate {
   sequence: { ordered: boolean; evidence: string };
   steps: CertificateStep[];
   totals: { checksEvaluated: number; checksPassed: number; notEvaluated: number; violations: number; repaired: number; unresolved: number; regenerations: number };
-  media: { keyframes: number; realFrames: number; placeholderFrames: number; references: Array<{ characterId: string; name: string; provider: string; model?: string }> };
+  media: { keyframes: number; realFrames: number; placeholderFrames: number; references: Array<{ characterId: string; name: string; kind: "character" | "location"; provider: string; model?: string }> };
+  language: LanguageReport;
+  outcomes: StoryOutcome[];
+  childId?: string;
   memory: { name: string; persistent: boolean; rows?: number };
   approval?: Project["approval"];
   approvalValid: boolean;
@@ -84,6 +89,7 @@ export async function buildContinuityCertificate(ctx: AgentContext, projectId: s
   const checks = repo.listChecks(projectId);
   const violations = repo.listViolations(projectId);
   const refs = repo.store.list<{ characterId: string; provenance: { provider: string; model?: string } }>("character_refs", projectId);
+  const locRefs = repo.store.list<{ characterId: string; provenance: { provider: string; model?: string } }>("location_refs", projectId);
   const child = world?.characters.find((c) => c.role === "protagonist")?.id ?? "";
   const vcById = new Map((world?.visualConstraints ?? []).map((v) => [v.id, v]));
   const reasons: string[] = [];
@@ -170,7 +176,18 @@ export async function buildContinuityCertificate(ctx: AgentContext, projectId: s
     sequence,
     steps,
     totals: { checksEvaluated: evaluatedChecks.length, checksPassed: evaluatedChecks.filter((c) => c.passed).length, notEvaluated: checks.length - evaluatedChecks.length, violations: violations.length, repaired: violations.filter((v) => v.status === "resolved").length, unresolved, regenerations },
-    media: { keyframes: steps.filter((s) => s.keyframe).length, realFrames: steps.filter((s) => s.realFrame).length, placeholderFrames: placeholders, references: refs.map((r) => ({ characterId: r.characterId, name: world?.characters.find((c) => c.id === r.characterId)?.name ?? r.characterId, provider: r.provenance.provider, model: r.provenance.model })) },
+    media: {
+      keyframes: steps.filter((s) => s.keyframe).length,
+      realFrames: steps.filter((s) => s.realFrame).length,
+      placeholderFrames: placeholders,
+      references: [
+        ...refs.map((r) => ({ characterId: r.characterId, name: world?.characters.find((c) => c.id === r.characterId)?.name ?? r.characterId, kind: "character" as const, provider: r.provenance.provider, model: r.provenance.model })),
+        ...locRefs.map((r) => ({ characterId: r.characterId, name: world?.locations.find((l) => l.id === r.characterId)?.name ?? r.characterId, kind: "location" as const, provider: r.provenance.provider, model: r.provenance.model })),
+      ],
+    },
+    language: checkPlainLanguage(brief),
+    outcomes: repo.listOutcomes(projectId),
+    childId: project.childId,
     memory: { name: ctx.memory.name, persistent: ctx.memory.persistent, rows: stats?.tables.reduce((a, t) => a + t.rows, 0) },
     approval,
     approvalValid,

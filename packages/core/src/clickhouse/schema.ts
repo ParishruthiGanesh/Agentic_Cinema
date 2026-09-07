@@ -76,6 +76,15 @@ export function schemaStatements(db: string): string[] {
       narrative_pass_rate Nullable(Float64), source_pass_rate Nullable(Float64), repair_attempts UInt32,
       recorded_at DateTime64(3)
     ) ENGINE = MergeTree ORDER BY (project_id, comparison_id, variant)`,
+    `CREATE TABLE IF NOT EXISTS ${T("child_profiles")} (
+      project_id String, child_id String, name String, age String, appearance String, outfit String,
+      comfort_items Array(String), companions Array(String), places Array(String), must_not_show Array(String),
+      sensory String, profile String, recorded_at DateTime64(3)
+    ) ENGINE = ReplacingMergeTree(recorded_at) ORDER BY (child_id)`,
+    `CREATE TABLE IF NOT EXISTS ${T("story_outcomes")} (
+      project_id String, child_id String, outcome_id String, recorded_by String, times_watched UInt32,
+      visit_outcome LowCardinality(String), notes String, anxious_steps Array(UInt32), step_notes String, recorded_at DateTime64(3)
+    ) ENGINE = MergeTree ORDER BY (child_id, project_id, recorded_at)`,
   ];
 }
 
@@ -94,4 +103,6 @@ export const MEMORY_TABLES = [
   "generation_attempts",
   "repair_attempts",
   "evaluation_results",
+  "child_profiles",
+  "story_outcomes",
 ] as const;

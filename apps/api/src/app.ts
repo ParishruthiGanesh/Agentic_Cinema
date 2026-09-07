@@ -6,6 +6,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join, normalize, extname } from "node:path";
 import {
   ApprovalBlockedError,
+  ChildProfileInput,
   ClickHouseMemory,
   CreateProjectInput,
   EVAL_PREFIX,
@@ -21,6 +22,18 @@ import {
   ensureSocialStoryDemo,
   generateShotMedia,
   listCharacterReferences,
+  listLocationReferences,
+  StoryOutcomeInput,
+  applyChildReferences,
+  briefFromChild,
+  checkPlainLanguage,
+  listChildPhotos,
+  recordOutcome,
+  removeChildPhoto,
+  revisionSeed,
+  saveChildPhoto,
+  storiesForChild,
+  upsertChildProfile,
   neighborhood,
   removeCharacterReference,
   repairViolation,
@@ -37,6 +50,7 @@ import {
 import type { RuntimeInfo } from "./context.js";
 import { JobBusyError, JobRunner } from "./jobs.js";
 import { openApiDocument } from "./openapi.js";
+import { renderBooklet } from "./booklet.js";
 import type { ProducerService } from "./producer.js";
 
 const MIME: Record<string, string> = { ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".vtt": "text/vtt" };
@@ -102,8 +116,50 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
 
   app.post("/api/projects", async (c) => {
     const input = CreateProjectInput.parse(await c.req.json());
+    if (input.childId && !ctx.repo.getChild(input.childId)) return c.json({ error: `Child profile ${input.childId} not found` }, 400);
     const project = createProject(ctx, input);
+    if (project.childId) await applyChildReferences(ctx, project);
     return c.json(projectSummary(ctx, project), 201);
+  });
+
+  /* ---- children: one profile, many stories ---- */
+  app.get("/api/children", (c) => c.json(ctx.repo.listChildren().map((ch) => ({ ...ch, stories: storiesForChild(ctx, ch.id).length, photos: listChildPhotos(ctx, ch.id).length }))));
+  app.post("/api/children", async (c) => {
+    const input = ChildProfileInput.parse(await c.req.json());
+    return c.json(upsertChildProfile(ctx, input), 201);
+  });
+  app.get("/api/children/:id", async (c) => {
+    const child = ctx.repo.getChild(c.req.param("id"));
+    if (!child) throw new NotFound("Child not found");
+    const stories = storiesForChild(ctx, child.id).map((p) => ({ ...projectSummary(ctx, p), outcomes: ctx.repo.listOutcomes(p.id) }));
+    const history = ctx.memory instanceof ClickHouseMemory ? await ctx.memory.childHistory(child.id).catch(() => null) : null;
+    return c.json({ child, stories, photos: listChildPhotos(ctx, child.id), history });
+  });
+  app.put("/api/children/:id", async (c) => {
+    const existing = ctx.repo.getChild(c.req.param("id"));
+    if (!existing) throw new NotFound("Child not found");
+    const input = ChildProfileInput.parse({ ...(await c.req.json()), id: existing.id });
+    return c.json(upsertChildProfile(ctx, input));
+  });
+  app.delete("/api/children/:id", (c) => {
+    ctx.repo.deleteChild(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+  app.post("/api/children/:id/photos/:entityId", async (c) => {
+    const body = z.object({ mimeType: z.string(), data: z.string().min(1), kind: z.enum(["character", "location"]).default("character") }).parse(await c.req.json());
+    try {
+      return c.json(await saveChildPhoto(ctx, c.req.param("id"), c.req.param("entityId"), body.kind, body), 201);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+  app.delete("/api/children/:id/photos/:entityId", (c) => c.json({ removed: removeChildPhoto(ctx, c.req.param("id"), c.req.param("entityId")) }));
+  /** Build a full brief from a child's profile plus the story-specific parts (used by the form's preview and by agents). */
+  app.post("/api/children/:id/brief", async (c) => {
+    const child = ctx.repo.getChild(c.req.param("id"));
+    if (!child) throw new NotFound("Child not found");
+    const body = z.object({ situation: z.string().min(1), steps: z.array(z.any()).default([]), settings: z.array(z.any()).optional(), companions: z.array(z.any()).optional(), comfortItems: z.array(z.any()).optional(), mustNotShow: z.array(z.string()).optional(), calmingRules: z.array(z.string()).optional(), authoredBy: z.string().optional() }).parse(await c.req.json());
+    return c.json(briefFromChild(child, body));
   });
 
   app.post("/api/projects/demo", (c) => c.json(projectSummary(ctx, ensureDemoProject(ctx)), 201));
@@ -112,6 +168,11 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
   app.get("/api/social-stories/example", (c) => c.json(MAYA_SOCIAL_STORY));
 
   /* ---- social stories: Gemini-assisted first draft (the adult edits it; the film uses their final words verbatim) ---- */
+  /** Plain-language critic on a brief (used by the form before submitting; also part of the certificate). */
+  app.post("/api/social-stories/lint", async (c) => {
+    const body = z.object({ steps: z.array(z.object({ text: z.string() })), calmingRules: z.array(z.string()).default([]) }).parse(await c.req.json());
+    return c.json(checkPlainLanguage({ steps: body.steps as never, calmingRules: body.calmingRules }));
+  });
   app.post("/api/social-stories/draft", async (c) => {
     if (ctx.llm.name === "fixture") return c.json({ error: "Drafting needs a Gemini key (LLM_PROVIDER=fixture). You can still write the steps yourself." }, 503);
     const body = z.object({ situation: z.string().min(3).max(500), childName: z.string().min(1).max(60), childAge: z.string().max(20).optional(), notes: z.string().max(2000).optional(), language: z.string().max(40).optional() }).parse(await c.req.json());
@@ -190,12 +251,15 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
   app.get("/api/projects/:id/continuity", (c) => c.json(continuitySummary(ctx, getProject(c.req.param("id")).id)));
   app.get("/api/projects/:id/film", (c) => c.json(ctx.repo.getFilm(getProject(c.req.param("id")).id) ?? null));
   app.get("/api/projects/:id/evaluations", (c) => c.json(ctx.repo.listEvaluations(getProject(c.req.param("id")).id)));
-  app.get("/api/projects/:id/references", (c) => c.json(listCharacterReferences(ctx, getProject(c.req.param("id")).id)));
+  app.get("/api/projects/:id/references", (c) => {
+    const id = getProject(c.req.param("id")).id;
+    return c.json(c.req.query("kind") === "location" ? listLocationReferences(ctx, id) : listCharacterReferences(ctx, id));
+  });
   app.post("/api/projects/:id/references/:characterId", async (c) => {
     const project = getProject(c.req.param("id"));
-    const body = z.object({ mimeType: z.string(), data: z.string().min(1), uploadedBy: z.string().max(80).optional() }).parse(await c.req.json());
+    const body = z.object({ mimeType: z.string(), data: z.string().min(1), uploadedBy: z.string().max(80).optional(), kind: z.enum(["character", "location"]).default("character") }).parse(await c.req.json());
     try {
-      const ref = await saveUploadedReference(ctx, project, c.req.param("characterId"), { mimeType: body.mimeType, data: body.data }, body.uploadedBy);
+      const ref = await saveUploadedReference(ctx, project, c.req.param("characterId"), { mimeType: body.mimeType, data: body.data }, body.uploadedBy, body.kind);
       return c.json(ref, 201);
     } catch (e) {
       return c.json({ error: (e as Error).message }, 400);
@@ -203,7 +267,7 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
   });
   app.delete("/api/projects/:id/references/:characterId", (c) => {
     const project = getProject(c.req.param("id"));
-    return c.json({ removed: removeCharacterReference(ctx, project.id, c.req.param("characterId")) });
+    return c.json({ removed: removeCharacterReference(ctx, project.id, c.req.param("characterId"), c.req.query("kind") === "location" ? "location" : "character") });
   });
 
   /* ---- social stories: continuity certificate + human sign-off ---- */
@@ -220,6 +284,22 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
     return c.json(r);
   });
   app.delete("/api/projects/:id/approve", (c) => c.json(revokeApproval(ctx, getProject(c.req.param("id")).id)));
+
+  /* ---- social stories: booklet, outcomes, revision ---- */
+  app.get("/api/projects/:id/booklet.pdf", async (c) => {
+    const project = getProject(c.req.param("id"));
+    if (project.mode !== "social_story") return c.json({ error: "Booklets are produced for social-story projects" }, 400);
+    const bytes = await renderBooklet(ctx, project.id);
+    return c.body(new Uint8Array(bytes).buffer as ArrayBuffer, 200, { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${project.id}-booklet.pdf"` });
+  });
+  app.get("/api/projects/:id/outcomes", (c) => c.json(ctx.repo.listOutcomes(getProject(c.req.param("id")).id)));
+  app.post("/api/projects/:id/outcomes", async (c) => {
+    const project = getProject(c.req.param("id"));
+    if (project.mode !== "social_story") return c.json({ error: "Outcomes are recorded for social-story projects" }, 400);
+    const input = StoryOutcomeInput.parse(await c.req.json());
+    return c.json(recordOutcome(ctx, project, input), 201);
+  });
+  app.get("/api/projects/:id/revision-seed", (c) => c.json(revisionSeed(ctx, getProject(c.req.param("id")))));
   app.get("/api/projects/:id/source-analysis", (c) => c.json(ctx.repo.store.get("source_analysis_raw", getProject(c.req.param("id")).id, "current") ?? null));
 
   app.get("/api/projects/:id/scenes/:sceneId/context", (c) => {

@@ -22,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
             <nav className="flex items-center gap-4 text-sm text-ink-300">
               <Link href="/" className="hover:text-ink-100">Dashboard</Link>
+              <Link href="/children" className="hover:text-ink-100">Children</Link>
               <Link href="/projects/new" className="btn-primary !py-1">New project</Link>
             </nav>
           </div>

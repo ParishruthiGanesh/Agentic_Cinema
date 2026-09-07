@@ -141,5 +141,29 @@ describe("API", () => {
     expect(draft.status).toBe(503);
     const revoked = await app.request(`/api/projects/${id}/approve`, { method: "DELETE" });
     expect((await revoked.json()).approval).toBeUndefined();
+    // Booklet, outcomes, child profile and lint.
+    const pdf = await app.request(`/api/projects/${id}/booklet.pdf`);
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toContain("application/pdf");
+    expect((await pdf.arrayBuffer()).byteLength).toBeGreaterThan(2000);
+    const out = await app.request(`/api/projects/${id}/outcomes`, { method: "POST", body: JSON.stringify({ recordedBy: "Mum", timesWatched: 3, visitOutcome: "went_well", stepNotes: [{ stepNumber: 2, reaction: "calm" }] }), headers: { "content-type": "application/json" } });
+    expect(out.status).toBe(201);
+    const child = await (await app.request("/api/children/maya")).json();
+    expect(child.child.outfit).toContain("yellow");
+    expect(child.stories[0].outcomes).toHaveLength(1);
+    expect(child.stories[0].project.id).toBe(id);
+    const lint = await (await app.request("/api/social-stories/lint", { method: "POST", body: JSON.stringify({ steps: [{ text: "Sam went to the shop." }], calmingRules: [] }), headers: { "content-type": "application/json" } })).json();
+    expect(lint.findings.map((f: { rule: string }) => f.rule)).toContain("past_tense");
+    const seed = await (await app.request(`/api/projects/${id}/revision-seed`)).json();
+    expect(seed.brief.steps).toHaveLength(7);
+    // A new story from the profile inherits the child and copies profile photos.
+    expect((await app.request("/api/children/maya/photos/maya", { method: "POST", body: JSON.stringify({ mimeType: "image/png", data: png }), headers: { "content-type": "application/json" } })).status).toBe(201);
+    const brief = await (await app.request("/api/children/maya/brief", { method: "POST", body: JSON.stringify({ situation: "a haircut", steps: [{ title: "Chair", text: "I sit in the chair.", settingId: "hallway", companionIds: [], comfortItemIds: ["bun"] }] }), headers: { "content-type": "application/json" } })).json();
+    const created2 = await app.request("/api/projects", { method: "POST", body: JSON.stringify({ title: "Maya haircut", mode: "social_story", childId: "maya", source: { kind: "social_story", title: "x", text: "I sit in the chair." }, brief: { genre: "social story", audience: "an autistic child", targetDurationSec: 30, language: "English", visualStyle: "flat", format: "social story film", requiredFacts: [] }, socialStory: brief }), headers: { "content-type": "application/json" } });
+    expect(created2.status).toBe(201);
+    const p2 = (await created2.json()).project;
+    expect(p2.childId).toBe("maya");
+    const refs = await (await app.request(`/api/projects/${p2.id}/references`)).json();
+    expect(refs.find((r: { characterId: string }) => r.characterId === "maya")?.provenance.provider).toBe("upload");
   });
 });

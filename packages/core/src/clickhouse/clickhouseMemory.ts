@@ -1,11 +1,13 @@
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import type {
   CheckRecord,
+  ChildProfile,
   EvalComparison,
   RepairAttempt,
   Screenplay,
   ShotPlan,
   StateChange,
+  StoryOutcome,
   Violation,
   WorkflowEvent,
   WorldState,
@@ -207,6 +209,27 @@ export class ClickHouseMemory implements ProductionMemory, PartnerAdapter {
       "evaluation_results",
       [cmp.baseline, cmp.cinememory].map((r) => ({ project_id: cmp.projectId, comparison_id: cmp.id, variant: r.variant, eval_project_id: r.evalProjectId, constraints_evaluated: r.metrics.constraintsEvaluated, checks_evaluated: r.metrics.checksEvaluated, checks_not_evaluated: r.metrics.checksNotEvaluated, violations_detected: r.metrics.violationsDetected, violations_repaired: r.metrics.violationsRepaired, violations_unresolved: r.metrics.violationsUnresolved, visual_pass_rate: r.metrics.visualPassRate, narrative_pass_rate: r.metrics.narrativePassRate, source_pass_rate: r.metrics.sourcePassRate, repair_attempts: r.metrics.repairAttempts, recorded_at: at })),
     );
+  }
+
+  async recordChildProfile(c: ChildProfile): Promise<void> {
+    await this.insert("child_profiles", [{ project_id: "", child_id: c.id, name: c.name, age: c.age ?? "", appearance: c.appearance, outfit: c.outfit, comfort_items: c.comfortItems.map((x) => x.name), companions: c.companions.map((x) => `${x.name} (${x.role})`), places: c.places.map((x) => x.name), must_not_show: c.mustNotShow, sensory: JSON.stringify(c.sensory), profile: JSON.stringify(c), recorded_at: now() }]);
+  }
+
+  async recordOutcome(o: StoryOutcome): Promise<void> {
+    await this.insert("story_outcomes", [{ project_id: o.projectId, child_id: o.childId ?? "", outcome_id: o.id, recorded_by: o.recordedBy, times_watched: o.timesWatched, visit_outcome: o.visitOutcome, notes: o.notes ?? "", anxious_steps: o.stepNotes.filter((s) => s.reaction === "anxious").map((s) => s.stepNumber), step_notes: JSON.stringify(o.stepNotes), recorded_at: now() }]);
+  }
+
+  /** Longitudinal view for a child: every story, its certificate-relevant counts and recorded outcomes. */
+  async childHistory(childId: string) {
+    await this.init();
+    const stories = await this.select<{ project_id: string; violations: string; repairs: string; last: string }>(
+      `SELECT project_id, countDistinct(violation_id) AS violations, countIf(status = 'resolved') AS repairs, max(recorded_at) AS last FROM ${this.t("violation_history")} WHERE project_id IN (SELECT DISTINCT project_id FROM ${this.t("story_outcomes")} WHERE child_id = {child:String}) GROUP BY project_id`,
+      { child: childId },
+      "child story history",
+    );
+    const outcomes = await this.select<{ project_id: string; visit_outcome: string; times_watched: string; anxious_steps: number[]; recorded_at: string }>(`SELECT project_id, visit_outcome, times_watched, anxious_steps, recorded_at FROM ${this.t("story_outcomes")} WHERE child_id = {child:String} ORDER BY recorded_at`, { child: childId }, "child outcomes");
+    const versions = await this.select<{ n: string; first: string; last: string }>(`SELECT count() AS n, min(recorded_at) AS first, max(recorded_at) AS last FROM ${this.t("child_profiles")} WHERE child_id = {child:String}`, { child: childId }, "child profile versions");
+    return { stories: stories.rows, outcomes: outcomes.rows, profileVersions: versions.rows[0], traces: [stories.trace, outcomes.trace, versions.trace] };
   }
 
   /* ------------------------------------------------------------------ */

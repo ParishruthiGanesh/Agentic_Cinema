@@ -1,4 +1,4 @@
-import type { CreateProjectInput, SocialStoryBrief } from "../model/index.js";
+import type { ChildProfileInput, CreateProjectInput, SocialStoryBrief } from "../model/index.js";
 import { DEFAULT_SOCIAL_STORY_STYLE, renderSocialStoryText } from "../social/compile.js";
 
 /**
@@ -62,3 +62,21 @@ export const MAYA_DEMO_INPUT: CreateProjectInput = {
 };
 
 export const SOCIAL_STORY_DEMO_ID = "maya_dentist_demo";
+export const MAYA_CHILD_ID = "maya";
+
+/** Maya's profile: the part of the story that stays the same across every situation. */
+export const MAYA_CHILD_PROFILE: ChildProfileInput = {
+  id: MAYA_CHILD_ID,
+  name: MAYA_SOCIAL_STORY.child.name,
+  age: MAYA_SOCIAL_STORY.child.age,
+  appearance: MAYA_SOCIAL_STORY.child.appearance,
+  outfit: MAYA_SOCIAL_STORY.child.outfit,
+  comfortItems: MAYA_SOCIAL_STORY.comfortItems,
+  companions: MAYA_SOCIAL_STORY.companions.filter((c) => c.id === "mum"),
+  places: MAYA_SOCIAL_STORY.settings.filter((s) => s.id === "hallway"),
+  mustNotShow: ["crying or frightened faces"],
+  calmingRules: MAYA_SOCIAL_STORY.calmingRules,
+  sensory: { reducedMotion: true, sound: "on", showText: true, largeText: true, pacing: "slow", notes: "Loud sudden sounds are hard; likes to tap to go on herself." },
+  guardian: "Mum (fictional example)",
+  notes: "Fictional child used for the CineMemory demo.",
+};

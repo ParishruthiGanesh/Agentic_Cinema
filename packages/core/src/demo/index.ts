@@ -4,10 +4,11 @@ import type { Project } from "../model/index.js";
 import { createProject } from "../workflow/orchestrator.js";
 import { ADAPTATION, SCREENPLAY, SHOT_PLANS, SOURCE_ANALYSIS } from "./fixtures.js";
 import { LUMI_DEMO_INPUT } from "./story.js";
-import { MAYA_DEMO_INPUT, SOCIAL_STORY_DEMO_ID } from "./maya.js";
+import { MAYA_CHILD_ID, MAYA_CHILD_PROFILE, MAYA_DEMO_INPUT, SOCIAL_STORY_DEMO_ID } from "./maya.js";
+import { upsertChildProfile } from "../social/child.js";
 
 export { LUMI_DEMO_INPUT, LUMI_STORY } from "./story.js";
-export { MAYA_DEMO_INPUT, MAYA_SOCIAL_STORY, SOCIAL_STORY_DEMO_ID } from "./maya.js";
+export { MAYA_CHILD_ID, MAYA_CHILD_PROFILE, MAYA_DEMO_INPUT, MAYA_SOCIAL_STORY, SOCIAL_STORY_DEMO_ID } from "./maya.js";
 export * as DEMO_FIXTURES from "./fixtures.js";
 
 export const DEMO_PROJECT_ID = "lumi_demo";
@@ -92,7 +93,8 @@ export function ensureDemoProject(ctx: AgentContext): Project {
 
 /** Create (or return) the bundled social-story demo ("Maya goes to the dentist"). */
 export function ensureSocialStoryDemo(ctx: AgentContext): Project {
+  if (!ctx.repo.getChild(MAYA_CHILD_ID)) upsertChildProfile(ctx, MAYA_CHILD_PROFILE);
   const existing = ctx.repo.getProject(SOCIAL_STORY_DEMO_ID);
   if (existing) return existing;
-  return createProject(ctx, MAYA_DEMO_INPUT, { id: SOCIAL_STORY_DEMO_ID, isDemo: true });
+  return createProject(ctx, { ...MAYA_DEMO_INPUT, childId: MAYA_CHILD_ID }, { id: SOCIAL_STORY_DEMO_ID, isDemo: true });
 }

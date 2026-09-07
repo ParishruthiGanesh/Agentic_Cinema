@@ -110,3 +110,50 @@ describe("Social story pipeline (fixture mode, placeholder media)", () => {
     await expect(buildContinuityCertificate(ctx, p.id)).rejects.toThrow(/social-story projects only/);
   });
 });
+
+describe("Plain-language critic, child profile, outcomes", () => {
+  it("flags the things a therapist would flag and passes Maya's steps cleanly enough", async () => {
+    const { checkPlainLanguage, checkStepText } = await import("../src/social/language.js");
+    const r = checkStepText(1, "Ravi went to the shop and it was a piece of cake, wasn't it? The teacher said don't run.");
+    const rules = r.findings.map((f) => f.rule);
+    expect(rules).toContain("first_person");
+    expect(rules).toContain("past_tense");
+    expect(rules).toContain("idiom");
+    expect(rules).toContain("question");
+    expect(rules).toContain("negative_phrasing");
+    const maya = checkPlainLanguage(MAYA_SOCIAL_STORY);
+    expect(maya.summary.medium).toBe(0);
+    expect(maya.steps).toHaveLength(9);
+  });
+
+  it("builds every story from the same child profile and records outcomes into memory", async () => {
+    const { briefFromChild, recordOutcome, revisionSeed, saveChildPhoto, applyChildReferences } = await import("../src/social/child.js");
+    const { MAYA_CHILD_PROFILE } = await import("../src/demo/index.js");
+    const ctx = makeTestContext();
+    const project = ensureSocialStoryDemo(ctx);
+    const child = ctx.repo.getChild("maya")!;
+    expect(child.outfit).toBe(MAYA_SOCIAL_STORY.child.outfit);
+    expect(project.childId).toBe("maya");
+    // A second situation reuses identity, outfit, Bun and Mum without restating them.
+    const haircut = briefFromChild(child, { situation: "getting a haircut", settings: [{ id: "salon", name: "Hair salon", description: "a bright salon with a big chair and a mirror" }], steps: [{ title: "The chair", text: "I sit in the big chair. I hold Bun.", settingId: "salon", companionIds: ["mum"], comfortItemIds: ["bun"] }] });
+    expect(haircut.child.outfit).toBe(MAYA_CHILD_PROFILE.outfit);
+    expect(haircut.comfortItems.map((c) => c.id)).toEqual(["bun"]);
+    expect(haircut.companions.map((c) => c.id)).toEqual(["mum"]);
+    expect(haircut.settings.map((s) => s.id)).toEqual(["hallway", "salon"]);
+    expect(haircut.calmingRules.length).toBe(2);
+    // Photos on the profile flow into every story as references.
+    await saveChildPhoto(ctx, "maya", "maya", "character", { mimeType: "image/png", data: PNG_1x1 });
+    await saveChildPhoto(ctx, "maya", "hallway", "location", { mimeType: "image/png", data: PNG_1x1 });
+    await expect(saveChildPhoto(ctx, "maya", "nobody", "character", { mimeType: "image/png", data: PNG_1x1 })).rejects.toThrow(/not part of/);
+    expect(await applyChildReferences(ctx, project)).toBe(2);
+    expect(ctx.repo.store.get<{ provenance: { provider: string } }>("location_refs", project.id, "hallway")?.provenance.provider).toBe("upload");
+    // Outcome after the real visit.
+    const o = recordOutcome(ctx, project, { recordedBy: "Mum", timesWatched: 4, visitOutcome: "some_difficulty", stepNotes: [{ stepNumber: 5, reaction: "anxious", note: "the light was too bright" }] });
+    expect(ctx.repo.listOutcomes(project.id)).toHaveLength(1);
+    expect(ctx.repo.listEvents(project.id).some((e) => e.type === "social_story.outcome")).toBe(true);
+    const seed = revisionSeed(ctx, project);
+    expect(seed.notes[0]).toMatchObject({ stepNumber: 5, reaction: "anxious" });
+    expect(seed.brief.steps).toHaveLength(7);
+    void o;
+  });
+});
