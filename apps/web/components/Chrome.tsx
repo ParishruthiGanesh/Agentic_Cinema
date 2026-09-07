@@ -49,8 +49,8 @@ function FamilyShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
           <Link href="/" className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#2f7d4f] text-base font-black text-white">S</span>
-            <span className="text-lg font-semibold">Same Story</span>
-            <span className="hidden text-sm text-[#7a7264] sm:inline">stories that stay the same, for children who need them to</span>
+            <span className="text-lg font-semibold">Story Ahead</span>
+            <span className="hidden text-sm text-[#7a7264] sm:inline">see what happens next, one calm picture at a time</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm">
             {account ? (
@@ -66,7 +66,7 @@ function FamilyShell({ children }: { children: React.ReactNode }) {
       </header>
       <main className="mx-auto max-w-5xl px-5 py-8">{children}</main>
       <footer className="mx-auto max-w-5xl px-5 pb-8 text-xs text-[#9a927f]">
-        Built on CineMemory. Therapists and engineers: <Link href="/studio" className="underline">open the studio</Link>.
+        Every picture is checked against your child's look, clothes, rooms and must-not list before you approve it.
       </footer>
     </div>
   );

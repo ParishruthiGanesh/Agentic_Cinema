@@ -177,7 +177,6 @@ function Story({ id }: { id: string }) {
           )}
         </>
       )}
-      <div className="text-xs text-[#a59d8c]">Therapist details: <Link href={`/projects/${id}/certificate`} className="underline">full continuity certificate</Link>.</div>
     </div>
   );
 }

@@ -79,10 +79,10 @@ function Player() {
         <Centered>
           <div className="text-2xl font-semibold">This story is waiting for a grown-up to check it.</div>
           <div className="mt-2 text-base text-[#5b554b]">A parent or therapist approves the Continuity Certificate first.</div>
-          <div className="mt-6 flex gap-3"><Link href={`/projects/${id}/certificate`} className="rounded-xl bg-[#26221c] px-5 py-3 text-white">Open the certificate</Link><Link href={`/watch/${id}?preview=1`} className="rounded-xl border border-[#26221c] px-5 py-3">Preview anyway (adult)</Link></div>
+          <div className="mt-6 flex gap-3"><Link href={`/stories/${id}`} className="rounded-xl bg-[#26221c] px-5 py-3 text-white">Open the story</Link><Link href={`/watch/${id}?preview=1`} className="rounded-xl border border-[#26221c] px-5 py-3">Preview anyway (adult)</Link></div>
         </Centered>
       ) : !film.data && !film.loading ? (
-        <Centered><div className="text-2xl font-semibold">The pictures are not ready yet.</div><Link href={`/projects/${id}/production`} className="mt-4 underline">Open production</Link></Centered>
+        <Centered><div className="text-2xl font-semibold">The pictures are not ready yet.</div><Link href={`/stories/${id}`} className="mt-4 underline">Open the story</Link></Centered>
       ) : !page ? (
         <Centered><div className="text-xl">Loading…</div></Centered>
       ) : done ? (
@@ -97,7 +97,7 @@ function Player() {
             <span>{i + 1} of {pages.length}{preview && !approved ? " · preview (not approved)" : ""}</span>
             <div className="flex items-center gap-3">
               <button className="rounded-lg border border-[#c9c1b1] px-3 py-1" onClick={() => setShowSettings((s) => !s)} aria-label="Settings">⚙︎</button>
-              <Link href={`/projects/${id}/certificate`} className="rounded-lg border border-[#c9c1b1] px-3 py-1" aria-label="Exit">Exit</Link>
+              <Link href={`/stories/${id}`} className="rounded-lg border border-[#c9c1b1] px-3 py-1" aria-label="Exit">Exit</Link>
             </div>
           </div>
           {showSettings && (
