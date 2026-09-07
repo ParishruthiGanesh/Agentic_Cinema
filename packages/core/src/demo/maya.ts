@@ -77,6 +77,7 @@ export const MAYA_CHILD_PROFILE: ChildProfileInput = {
   mustNotShow: ["crying or frightened faces"],
   calmingRules: MAYA_SOCIAL_STORY.calmingRules,
   sensory: { reducedMotion: true, sound: "on", showText: true, largeText: true, pacing: "slow", notes: "Loud sudden sounds are hard; likes to tap to go on herself." },
+  style: "illustrated",
   guardian: "Mum (fictional example)",
   notes: "Fictional child used for the CineMemory demo.",
 };

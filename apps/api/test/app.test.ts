@@ -166,4 +166,28 @@ describe("API", () => {
     const refs = await (await app.request(`/api/projects/${p2.id}/references`)).json();
     expect(refs.find((r: { characterId: string }) => r.characterId === "maya")?.provenance.provider).toBe("upload");
   });
+
+  it("family accounts: register, sign in, own children, claim the example child, plain-words story status", async () => {
+    const { app } = makeApp();
+    const reg = await app.request("/api/auth/register", { method: "POST", body: JSON.stringify({ email: "mum@example.com", password: "correct horse", name: "Mum" }), headers: { "content-type": "application/json" } });
+    expect(reg.status).toBe(201);
+    const { token } = await reg.json();
+    const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+    expect((await app.request("/api/auth/login", { method: "POST", body: JSON.stringify({ email: "mum@example.com", password: "wrong" }), headers: { "content-type": "application/json" } })).status).toBe(401);
+    expect((await (await app.request("/api/auth/me", { headers: auth })).json()).account.email).toBe("mum@example.com");
+    expect((await app.request("/api/auth/me")).status).toBe(401);
+    expect(await (await app.request("/api/children?mine=1", { headers: auth })).json()).toEqual([]);
+    const claimed = await app.request("/api/children/claim-demo", { method: "POST", headers: auth });
+    expect(claimed.status).toBe(200);
+    expect((await claimed.json()).accountId).toBeDefined();
+    expect((await (await app.request("/api/children?mine=1", { headers: auth })).json()).length).toBe(1);
+    const created = await app.request("/api/children/maya/stories", { method: "POST", body: JSON.stringify({ situation: "a haircut", steps: [{ title: "Chair", text: "I sit in the chair.", settingId: "hallway", companionIds: ["mum"], comfortItemIds: ["bun"] }], style: "photo", start: false }), headers: auth });
+    expect(created.status).toBe(201);
+    const body = await created.json();
+    expect(body.project.childId).toBe("maya");
+    expect(body.project.brief.visualStyle).toContain("photograph");
+    expect(body.story.code).toBe("not_started");
+    expect((await app.request("/api/auth/logout", { method: "POST", headers: auth })).status).toBe(200);
+    expect((await app.request("/api/auth/me", { headers: auth })).status).toBe(401);
+  });
 });

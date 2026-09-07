@@ -19,6 +19,13 @@ A social story only works if it matches reality **and matches itself**. Many aut
 | Drift gets fixed | The Repair Agent regenerates a failing frame and the Visual Critic re-inspects it (bounded attempts, escalation to the adult). |
 | A person decides | The **Continuity Certificate** shows, per step, what was verified and what was repaired. A therapist or parent signs it; approval is tied to the picture versions and is invalidated by any regeneration. |
 
+## Two front doors
+
+- **Family app** (`/`): sign in (email and password, or Google when `GOOGLE_OAUTH_CLIENT_ID` is set), your children, their stories with a plain-words status ("Drawing the pictures", "Waiting for your approval", "Ready to watch"), a three-step "New story" wizard (what is happening → the words → the pictures), an approval screen that shows every picture with its words and simple checks ("Same clothes ✓"), then Watch and Print. Nothing about pipelines, stages, models or databases is shown. Product name on this surface: **Same Story**.
+- **Studio** (`/studio`, `/projects/*`, `/children/*`): the full workspace for therapists who want the detail, and for judges and engineers: agent activity, CineGraph, Continuity Command Center, Memory (ClickHouse), certificate, evaluation.
+
+Picture style is chosen per child on the profile: **Illustrated** (a calm drawing guided by the photos; the default) or **Photo** (photograph-like, matching the uploaded photos of the child and the real rooms). "Make a preview" renders the child in each style so the adult can check the likeness before any story is made. The photo style is offered honestly: image models can still get a specific real face slightly wrong, which is why every picture is shown for approval.
+
 ## Built for the child, not just the film
 
 | Need | What exists |

@@ -44,6 +44,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.17(hono@4.13.7)
+      google-auth-library:
+        specifier: 9.15.1
+        version: 9.15.1
       hono:
         specifier: ^4.6.0
         version: 4.13.7

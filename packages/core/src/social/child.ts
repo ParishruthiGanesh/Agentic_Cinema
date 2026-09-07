@@ -2,7 +2,7 @@ import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import type { AgentContext } from "../agents/context.js";
 import { CHILDREN_SCOPE } from "../persistence/repository.js";
-import { ChildProfile, StoryOutcome, type ChildProfileInput, type Project, type SocialStoryBrief, type StoryOutcomeInput, slugify } from "../model/index.js";
+import { ChildProfile, PICTURE_STYLES, StoryOutcome, type ChildProfileInput, type Project, type SocialStoryBrief, type StoryOutcomeInput, slugify } from "../model/index.js";
 import type { CharacterReference } from "../media/generation.js";
 
 /* ------------------------------------------------------------------ */
@@ -17,6 +17,11 @@ export function upsertChildProfile(ctx: AgentContext, input: ChildProfileInput):
   ctx.repo.saveChild(profile);
   void ctx.memory.recordChildProfile(profile).catch(() => undefined);
   return profile;
+}
+
+/** The visual style prompt for a child's stories (the child's choice, or an explicit override per story). */
+export function visualStyleFor(child: ChildProfile, override?: "illustrated" | "photo"): string {
+  return PICTURE_STYLES[override ?? child.style].prompt;
 }
 
 /** Stories created from a child's profile, newest first. */

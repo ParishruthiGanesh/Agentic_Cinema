@@ -33,7 +33,12 @@ import {
   revisionSeed,
   saveChildPhoto,
   storiesForChild,
+  storyStatus,
   upsertChildProfile,
+  visualStyleFor,
+  PICTURE_STYLES,
+  SocialStoryBrief,
+  renderSocialStoryText,
   neighborhood,
   removeCharacterReference,
   repairViolation,
@@ -51,11 +56,12 @@ import type { RuntimeInfo } from "./context.js";
 import { JobBusyError, JobRunner } from "./jobs.js";
 import { openApiDocument } from "./openapi.js";
 import { renderBooklet } from "./booklet.js";
+import { AuthError, AuthService, publicAccount, type Account } from "./auth.js";
 import type { ProducerService } from "./producer.js";
 
 const MIME: Record<string, string> = { ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".vtt": "text/vtt" };
 
-export function projectSummary(ctx: AgentContext, project: Project) {
+export function projectSummary(ctx: AgentContext, project: Project, jobs?: JobRunner) {
   const world = ctx.repo.getWorld(project.id);
   const screenplay = ctx.repo.getScreenplay(project.id);
   const shots = ctx.repo.getShotPlan(project.id)?.shots ?? [];
@@ -83,15 +89,21 @@ export function projectSummary(ctx: AgentContext, project: Project) {
     durationSec: screenplay?.totalDurationSec,
     film: !!ctx.repo.getFilm(project.id),
     lastEvent: ctx.repo.listEvents(project.id).slice(-1)[0],
+    story: project.mode === "social_story" ? storyStatus(project, { running: !!jobs?.current(project.id), jobError: jobs?.recent(project.id)[0]?.error }) : undefined,
+    coverPath: ctx.repo.getShotPlan(project.id)?.shots.find((s) => s.keyframe && s.keyframe.provenance.provider !== "placeholder")?.keyframe?.path,
   };
 }
 
-export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner, producer?: ProducerService) {
-  const app = new Hono();
+type Vars = { Variables: { account?: Account } };
+
+export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner, producer?: ProducerService, auth: AuthService = new AuthService(ctx, process.env.GOOGLE_OAUTH_CLIENT_ID)) {
+  const app = new Hono<Vars>();
   app.use("*", cors());
+  app.use("*", auth.middleware());
 
   app.onError((err, c) => {
     if (err instanceof JobBusyError) return c.json({ error: err.message, job: err.job }, 409);
+    if (err instanceof AuthError) return c.json({ error: err.message }, 401);
     if (err instanceof ApprovalBlockedError) return c.json({ error: err.message, certificate: err.certificate }, 409);
     if (err instanceof z.ZodError) return c.json({ error: "Invalid request", issues: err.issues }, 400);
     console.error(err);
@@ -106,12 +118,44 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
 
   app.get("/api/openapi.json", (c) => c.json(openApiDocument(new URL(c.req.url).origin)));
 
+  /* ---- accounts (family app) ---- */
+  app.get("/api/auth/config", (c) => c.json({ googleClientId: auth.googleClientId ?? null, localAccounts: true }));
+  app.post("/api/auth/register", async (c) => {
+    const b = z.object({ email: z.string().email(), password: z.string().min(1), name: z.string().max(80).default("") }).parse(await c.req.json());
+    const r = auth.register(b.email, b.password, b.name);
+    return c.json({ account: publicAccount(r.account), token: r.token }, 201);
+  });
+  app.post("/api/auth/login", async (c) => {
+    const b = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(await c.req.json());
+    const r = auth.login(b.email, b.password);
+    return c.json({ account: publicAccount(r.account), token: r.token });
+  });
+  app.post("/api/auth/google", async (c) => {
+    const b = z.object({ credential: z.string().min(10) }).parse(await c.req.json());
+    const r = await auth.loginWithGoogle(b.credential);
+    return c.json({ account: publicAccount(r.account), token: r.token });
+  });
+  app.post("/api/auth/logout", (c) => {
+    const t = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
+    if (t) auth.logout(t);
+    return c.json({ ok: true });
+  });
+  app.get("/api/auth/me", (c) => {
+    const a = c.get("account");
+    return a ? c.json({ account: publicAccount(a) }) : c.json({ account: null }, 401);
+  });
+  const requireAccount = (c: { get(k: "account"): Account | undefined }) => {
+    const a = c.get("account");
+    if (!a) throw new AuthError("Please sign in");
+    return a;
+  };
+
   app.get("/api/health", async (c) => c.json({ ok: true, ...info, partnerHealth: await ctx.partner.healthCheck(), time: new Date().toISOString() }));
 
   app.get("/api/projects", (c) => {
     const includeEval = c.req.query("includeEval") === "true";
     const list = ctx.repo.listProjects().filter((p) => includeEval || !p.id.startsWith(EVAL_PREFIX));
-    return c.json(list.map((p) => projectSummary(ctx, p)));
+    return c.json(list.map((p) => projectSummary(ctx, p, jobs)));
   });
 
   app.post("/api/projects", async (c) => {
@@ -123,17 +167,84 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
   });
 
   /* ---- children: one profile, many stories ---- */
-  app.get("/api/children", (c) => c.json(ctx.repo.listChildren().map((ch) => ({ ...ch, stories: storiesForChild(ctx, ch.id).length, photos: listChildPhotos(ctx, ch.id).length }))));
+  app.get("/api/children", (c) => {
+    const account = c.get("account");
+    const mine = c.req.query("mine") === "1";
+    const list = ctx.repo.listChildren().filter((ch) => !mine || (account && ch.accountId === account.id));
+    return c.json(list.map((ch) => ({ ...ch, stories: storiesForChild(ctx, ch.id).length, photos: listChildPhotos(ctx, ch.id).length, previews: ctx.repo.store.list<{ childId: string; style: string }>("child_previews", "_children").filter((p) => p.childId === ch.id).length })));
+  });
   app.post("/api/children", async (c) => {
+    const account = c.get("account");
     const input = ChildProfileInput.parse(await c.req.json());
-    return c.json(upsertChildProfile(ctx, input), 201);
+    return c.json(upsertChildProfile(ctx, { ...input, accountId: input.accountId ?? account?.id }), 201);
+  });
+  /** The signed-in family takes the bundled example child (and her stories) into their account, if nobody has yet. */
+  app.post("/api/children/claim-demo", (c) => {
+    const account = requireAccount(c);
+    ensureSocialStoryDemo(ctx);
+    const maya = ctx.repo.getChild("maya")!;
+    if (maya.accountId && maya.accountId !== account.id) return c.json({ error: "The example child already belongs to another account. Create your own child profile instead." }, 409);
+    upsertChildProfile(ctx, { ...maya, accountId: account.id });
+    return c.json(ctx.repo.getChild("maya"), 200);
+  });
+  /** Generate a preview of how the child will look in the chosen style (from the profile text and photo), so the adult can check the likeness before any story is made. */
+  app.post("/api/children/:id/preview", async (c) => {
+    const child = ctx.repo.getChild(c.req.param("id"));
+    if (!child) throw new NotFound("Child not found");
+    const body = z.object({ style: z.enum(["illustrated", "photo"]).optional() }).parse((await c.req.json().catch(() => ({}))) ?? {});
+    const style = body.style ?? child.style;
+    const photo = listChildPhotos(ctx, child.id).find((p) => p.entityId === child.id.replace(/[^a-z0-9_]/g, "") || p.kind === "character" && p.entityId === child.name.toLowerCase());
+    const references: Array<{ mimeType: string; data: string; label: string }> = [];
+    if (photo) {
+      try {
+        const { readFile } = await import("node:fs/promises");
+        const { join } = await import("node:path");
+        references.push({ mimeType: photo.mimeType, data: (await readFile(join(ctx.config.mediaDir, photo.path))).toString("base64"), label: child.name });
+      } catch { /* no photo */ }
+    }
+    const prompt = `${PICTURE_STYLES[style].prompt}. ${child.name}: ${child.appearance}; wearing ${child.outfit}. Front view, calm neutral expression, full body, plain light background, soft even light. No text.`;
+    try {
+      const img = await ctx.media.generateImage({ prompt, aspectRatio: "1:1", references, label: `${child.name} · look preview` });
+      const { mkdir, writeFile } = await import("node:fs/promises");
+      const { join, dirname } = await import("node:path");
+      const ext = img.mimeType === "image/png" ? "png" : img.mimeType === "image/svg+xml" ? "svg" : "jpg";
+      const path = `children/${child.id}/preview_${style}.${ext}`;
+      await mkdir(dirname(join(ctx.config.mediaDir, path)), { recursive: true });
+      await writeFile(join(ctx.config.mediaDir, path), img.bytes);
+      const preview = { childId: child.id, style, path, mimeType: img.mimeType, provenance: img.provenance, fromPhoto: !!photo, createdAt: new Date().toISOString() };
+      ctx.repo.store.put("child_previews", "_children", `${child.id}:${style}`, preview);
+      return c.json(preview, 201);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 502);
+    }
+  });
+  /** One call for the family wizard: build the brief from the profile, create the story, attach photos, and start making it. */
+  app.post("/api/children/:id/stories", async (c) => {
+    const child = ctx.repo.getChild(c.req.param("id"));
+    if (!child) throw new NotFound("Child not found");
+    const body = z.object({ title: z.string().max(120).optional(), situation: z.string().min(1), steps: z.array(z.any()).min(1), settings: z.array(z.any()).optional(), companions: z.array(z.any()).optional(), comfortItems: z.array(z.any()).optional(), mustNotShow: z.array(z.string()).optional(), calmingRules: z.array(z.string()).optional(), authoredBy: z.string().optional(), style: z.enum(["illustrated", "photo"]).optional(), revisionOf: z.string().optional(), start: z.boolean().default(true) }).parse(await c.req.json());
+    const brief = SocialStoryBrief.parse(briefFromChild(child, body));
+    const title = body.title?.trim() || `${child.name}: ${body.situation}`;
+    const project = createProject(ctx, CreateProjectInput.parse({
+      title,
+      mode: "social_story",
+      source: { kind: "social_story", title: `${title} (routine)`, author: brief.authoredBy, text: renderSocialStoryText(brief) },
+      brief: { genre: "social story", audience: "an autistic child", ageRange: child.age, targetDurationSec: Math.max(30, brief.steps.length * 12), language: "English", visualStyle: visualStyleFor(child, body.style), tone: "calm, literal, reassuring", format: "social story film", requiredFacts: [] },
+      socialStory: brief,
+      childId: child.id,
+      revisionOf: body.revisionOf,
+    }));
+    await applyChildReferences(ctx, project);
+    const job = body.start ? jobs.start(project.id, "pipeline", "make the story", () => runPipeline(ctx, project.id, { toStage: "film_assembled" }).then(() => undefined)) : null;
+    return c.json({ ...projectSummary(ctx, project, jobs), job }, 201);
   });
   app.get("/api/children/:id", async (c) => {
     const child = ctx.repo.getChild(c.req.param("id"));
     if (!child) throw new NotFound("Child not found");
-    const stories = storiesForChild(ctx, child.id).map((p) => ({ ...projectSummary(ctx, p), outcomes: ctx.repo.listOutcomes(p.id) }));
+    const stories = storiesForChild(ctx, child.id).map((p) => ({ ...projectSummary(ctx, p, jobs), outcomes: ctx.repo.listOutcomes(p.id) }));
     const history = ctx.memory instanceof ClickHouseMemory ? await ctx.memory.childHistory(child.id).catch(() => null) : null;
-    return c.json({ child, stories, photos: listChildPhotos(ctx, child.id), history });
+    const previews = ctx.repo.store.list<{ childId: string; style: string; path: string; provenance: unknown; fromPhoto: boolean; createdAt: string }>("child_previews", "_children").filter((p) => p.childId === child.id);
+    return c.json({ child, stories, photos: listChildPhotos(ctx, child.id), previews, history, styles: PICTURE_STYLES });
   });
   app.put("/api/children/:id", async (c) => {
     const existing = ctx.repo.getChild(c.req.param("id"));
@@ -180,7 +291,7 @@ export function createApp(ctx: AgentContext, info: RuntimeInfo, jobs: JobRunner,
     return c.json({ draft: res.data, provenance: res.provenance });
   });
 
-  app.get("/api/projects/:id", (c) => c.json(projectSummary(ctx, getProject(c.req.param("id")))));
+  app.get("/api/projects/:id", (c) => c.json(projectSummary(ctx, getProject(c.req.param("id")), jobs)));
 
   app.delete("/api/projects/:id", (c) => {
     getProject(c.req.param("id"));

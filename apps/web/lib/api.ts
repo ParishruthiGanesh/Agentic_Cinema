@@ -60,6 +60,8 @@ export interface ProjectSummary {
   durationSec?: number;
   film: boolean;
   lastEvent?: WorkflowEvent;
+  story?: { code: "writing" | "drawing" | "checking" | "needs_approval" | "approved" | "failed" | "not_started"; label: string; detail: string };
+  coverPath?: string;
 }
 
 export interface MemoryTrace {
@@ -110,10 +112,44 @@ export interface Health {
   partnerHealth: { ok: boolean; adapter: string; detail?: string };
 }
 
+export interface Account {
+  id: string;
+  email: string;
+  name: string;
+  provider: "local" | "google";
+}
+
+export interface ChildPreview {
+  childId: string;
+  style: "illustrated" | "photo";
+  path: string;
+  mimeType: string;
+  provenance: { provider: string; model?: string; note?: string };
+  fromPhoto: boolean;
+  createdAt: string;
+}
+
+export interface CreateStoryInput {
+  title?: string;
+  situation: string;
+  steps: SocialStoryBrief["steps"];
+  settings?: SocialStoryBrief["settings"];
+  companions?: SocialStoryBrief["companions"];
+  comfortItems?: SocialStoryBrief["comfortItems"];
+  mustNotShow?: string[];
+  calmingRules?: string[];
+  authoredBy?: string;
+  style?: "illustrated" | "photo";
+  revisionOf?: string;
+  start?: boolean;
+}
+
 export interface ChildDetail {
   child: ChildProfile;
   stories: Array<ProjectSummary & { outcomes: StoryOutcome[] }>;
   photos: ChildPhoto[];
+  previews: ChildPreview[];
+  styles: Record<"illustrated" | "photo", { label: string; prompt: string; description: string }>;
   history: { stories: Array<{ project_id: string; violations: string; repairs: string; last: string }>; outcomes: Array<{ project_id: string; visit_outcome: string; times_watched: string; anxious_steps: number[]; recorded_at: string }>; profileVersions?: { n: string; first: string; last: string }; traces: MemoryTrace[] } | null;
 }
 
@@ -127,8 +163,26 @@ export class ApiError extends Error {
   }
 }
 
+const TOKEN_KEY = "cinememory.token";
+export function getToken(): string | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+export function setToken(token: string | null) {
+  try {
+    if (token) window.localStorage.setItem(TOKEN_KEY, token);
+    else window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) }, cache: "no-store" });
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...(init?.headers ?? {}) }, cache: "no-store" });
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
   if (!res.ok) throw new ApiError((body && (body.error as string)) || `${res.status} ${res.statusText}`, res.status, body);
@@ -164,6 +218,16 @@ export const api = {
   uploadChildPhoto: (id: string, entityId: string, file: { mimeType: string; data: string; kind: "character" | "location" }) => request<ChildPhoto>(`/api/children/${id}/photos/${entityId}`, { method: "POST", body: JSON.stringify(file) }),
   removeChildPhoto: (id: string, entityId: string) => request<{ removed: boolean }>(`/api/children/${id}/photos/${entityId}`, { method: "DELETE" }),
   bookletUrl: (id: string) => `${API_URL}/api/projects/${id}/booklet.pdf`,
+  authConfig: () => request<{ googleClientId: string | null; localAccounts: boolean }>("/api/auth/config"),
+  register: (input: { email: string; password: string; name?: string }) => request<{ account: Account; token: string }>("/api/auth/register", { method: "POST", body: JSON.stringify(input) }),
+  login: (input: { email: string; password: string }) => request<{ account: Account; token: string }>("/api/auth/login", { method: "POST", body: JSON.stringify(input) }),
+  loginWithGoogle: (credential: string) => request<{ account: Account; token: string }>("/api/auth/google", { method: "POST", body: JSON.stringify({ credential }) }),
+  logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
+  me: () => request<{ account: Account | null }>("/api/auth/me"),
+  myChildren: () => request<Array<ChildProfile & { stories: number; photos: number; previews: number }>>("/api/children?mine=1"),
+  claimDemoChild: () => request<ChildProfile>("/api/children/claim-demo", { method: "POST" }),
+  previewChild: (id: string, style?: "illustrated" | "photo") => request<ChildPreview>(`/api/children/${id}/preview`, { method: "POST", body: JSON.stringify({ style }) }),
+  createStory: (childId: string, input: CreateStoryInput) => request<ProjectSummary & { job: Job | null }>(`/api/children/${childId}/stories`, { method: "POST", body: JSON.stringify(input) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" }),
   run: (id: string, toStage?: Stage, force = false) => request<Job>(`/api/projects/${id}/run`, { method: "POST", body: JSON.stringify({ toStage, force }) }),
   reset: (id: string, stage: Stage) => request<Project>(`/api/projects/${id}/reset`, { method: "POST", body: JSON.stringify({ stage }) }),

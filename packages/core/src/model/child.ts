@@ -32,6 +32,10 @@ export const ChildProfile = z.object({
   mustNotShow: z.array(z.string()).default([]),
   calmingRules: z.array(z.string()).default([]),
   sensory: SensoryProfile.default({ reducedMotion: true, sound: "on", showText: true, largeText: false, pacing: "slow" }),
+  /** How the pictures should look: a calm illustration guided by the photos, or a photograph-like image. */
+  style: z.enum(["illustrated", "photo"]).default("illustrated"),
+  /** Owning account (family or clinic). Undefined for the bundled example until someone claims it. */
+  accountId: Id.optional(),
   /** Who maintains the profile (parent, therapist). */
   guardian: z.string().optional(),
   notes: z.string().optional(),
@@ -66,3 +70,9 @@ export const StoryOutcome = z.object({
 export type StoryOutcome = z.infer<typeof StoryOutcome>;
 export const StoryOutcomeInput = StoryOutcome.omit({ id: true, projectId: true, recordedAt: true, childId: true });
 export type StoryOutcomeInput = z.infer<typeof StoryOutcomeInput>;
+
+/** Prompt fragments for the two picture styles. */
+export const PICTURE_STYLES: Record<"illustrated" | "photo", { label: string; prompt: string; description: string }> = {
+  illustrated: { label: "Illustrated", prompt: "soft, flat, calm 2D illustration with gentle colours, clear simple shapes and uncluttered backgrounds; likeness guided by the reference photos", description: "A calm drawing that looks like your child and your rooms. Small differences are less upsetting than in a photo." },
+  photo: { label: "Photo", prompt: "natural, calm, photograph-like image in soft even daylight, real-looking people and rooms matching the reference photos exactly, no text", description: "Looks like a real photo of your child in the real place. Faces can be slightly off; check every picture before approving." },
+};

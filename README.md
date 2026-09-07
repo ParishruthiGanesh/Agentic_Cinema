@@ -100,6 +100,7 @@ After a `git pull` that changes `packages/core` or `apps/agent`, run `pnpm build
 
 | Variable | Purpose |
 |---|---|
+| `GOOGLE_OAUTH_CLIENT_ID` | optional; enables "Continue with Google" in the family app (local email/password accounts work without it) |
 | `GEMINI_API_KEY` | Google AI Studio key. Enables live Gemini agents, Gemini/Imagen keyframes, Gemini TTS, Gemini vision inspection. |
 | `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` | Use Vertex AI with Application Default Credentials instead of an API key. |
 | `LLM_PROVIDER` | `gemini` (default when a key is present) or `fixture` (development replay for the bundled demo only). |
