@@ -40,6 +40,19 @@ function Kid({ id }: { id: string }) {
       setBusy(undefined);
     }
   };
+  const removePhoto = async (entityId: string) => {
+    if (!confirm("Remove this photo? Future pictures will follow the written description instead.")) return;
+    setBusy(entityId);
+    setError(undefined);
+    try {
+      await api.removeChildPhoto(id, entityId);
+      await detail.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(undefined);
+    }
+  };
   const makePreview = async (style: "illustrated" | "photo") => {
     setBusy(`preview-${style}`);
     setError(undefined);
@@ -63,7 +76,7 @@ function Kid({ id }: { id: string }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex items-center gap-4">
-          <PhotoTile path={photoOf(id)} label={c.name} busy={busy === id} onFile={(f) => upload(id, "character", f)} big />
+          <PhotoTile path={photoOf(id)} label={c.name} busy={busy === id} onFile={(f) => upload(id, "character", f)} onRemove={() => removePhoto(id)} big />
           <div>
             <h1 className="text-3xl font-semibold">{c.name}</h1>
             <div className="text-[#7a7264]">{c.age ? `Age ${c.age} · ` : ""}{c.outfit}</div>
@@ -104,8 +117,8 @@ function Kid({ id }: { id: string }) {
         <div className="text-lg font-semibold">People and places {c.name} knows</div>
         <div className="text-sm text-[#7a7264]">Add a photo of each person and each real room. The pictures will match them.</div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-          {c.companions.map((p) => <PhotoTile key={p.id} path={photoOf(p.id)} label={`${p.name} (${p.role})`} sub={p.outfit} busy={busy === p.id} onFile={(f) => upload(p.id, "character", f)} />)}
-          {c.places.map((p) => <PhotoTile key={p.id} path={photoOf(p.id)} label={p.name} sub={p.description} busy={busy === p.id} onFile={(f) => upload(p.id, "location", f)} />)}
+          {c.companions.map((p) => <PhotoTile key={p.id} path={photoOf(p.id)} label={`${p.name} (${p.role})`} sub={p.outfit} busy={busy === p.id} onFile={(f) => upload(p.id, "character", f)} onRemove={() => removePhoto(p.id)} />)}
+          {c.places.map((p) => <PhotoTile key={p.id} path={photoOf(p.id)} label={p.name} sub={p.description} busy={busy === p.id} onFile={(f) => upload(p.id, "location", f)} onRemove={() => removePhoto(p.id)} />)}
           {c.comfortItems.map((p) => <div key={p.id} className="rounded-xl border border-[#eee9dd] p-3 text-sm"><div className="font-semibold">{p.name}</div><div className="text-xs text-[#7a7264]">{p.description}</div></div>)}
         </div>
       </Card>
@@ -130,13 +143,19 @@ function Kid({ id }: { id: string }) {
   );
 }
 
-function PhotoTile({ path, label, sub, busy, onFile, big }: { path?: string; label: string; sub?: string; busy: boolean; onFile: (f?: File) => void; big?: boolean }) {
+function PhotoTile({ path, label, sub, busy, onFile, onRemove, big }: { path?: string; label: string; sub?: string; busy: boolean; onFile: (f?: File) => void; onRemove?: () => void; big?: boolean }) {
   return (
-    <label className={`block cursor-pointer ${big ? "" : "rounded-xl border border-[#eee9dd] p-3"}`}>
-      <div className={`overflow-hidden rounded-xl bg-[#eee9dd] ${big ? "h-24 w-24" : "aspect-video w-full"}`}>{path ? <img src={mediaUrl(path)} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xs text-[#a59d8c]">{busy ? "uploading…" : "add photo"}</div>}</div>
-      {!big && <div className="mt-2 text-sm font-semibold">{label}</div>}
-      {!big && sub && <div className="text-xs text-[#7a7264]">{sub}</div>}
-      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
-    </label>
+    <div className={`relative ${big ? "" : "rounded-xl border border-[#eee9dd] p-3"}`}>
+      <label className="block cursor-pointer" title={path ? "Click to replace the photo" : "Add a photo"}>
+        <div className={`overflow-hidden rounded-xl bg-[#eee9dd] ${big ? "h-24 w-24" : "aspect-video w-full"}`}>{path ? <img src={mediaUrl(path)} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xs text-[#a59d8c]">{busy ? "uploading…" : "add photo"}</div>}</div>
+        {!big && <div className="mt-2 text-sm font-semibold">{label}</div>}
+        {!big && sub && <div className="text-xs text-[#7a7264]">{sub}</div>}
+        <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
+      </label>
+      {path && onRemove && (
+        <button type="button" aria-label="Remove photo" title="Remove photo" disabled={busy} onClick={onRemove} className={`absolute grid h-7 w-7 place-items-center rounded-full bg-white/95 text-base leading-none text-[#a13333] shadow ring-1 ring-[#e6dfd0] hover:bg-[#fde7e7] ${big ? "-right-2 -top-2" : "right-5 top-5"}`}>×</button>
+      )}
+      {path && !big && <div className="mt-1 text-[11px] text-[#a59d8c]">Click the picture to replace it.</div>}
+    </div>
   );
 }
