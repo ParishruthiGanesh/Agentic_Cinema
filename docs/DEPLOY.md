@@ -32,6 +32,21 @@ sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli container
 sudo usermod -aG docker $USER && newgrp docker
 ```
 
+If that last install reports "no installation candidate" (Docker publishes no packages for some
+releases, Debian 13 among them), use the distro engine plus the official compose plugin instead:
+
+```bash
+sudo rm -f /etc/apt/sources.list.d/docker.list && sudo apt-get update
+sudo apt-get install -y docker.io
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+sudo usermod -aG docker $USER
+```
+
+Then reopen the SSH window (so the docker group applies) and check with `docker compose version`
+and `docker run --rm hello-world`.
+
 ```bash
 # 2 GB of swap: the Next.js build needs more memory than an e2-medium has.
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
