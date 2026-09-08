@@ -32,7 +32,13 @@ sudo usermod -aG docker $USER && newgrp docker
 ```
 
 ```bash
-# The app
+# 2 GB of swap: the Next.js build needs more memory than an e2-medium has.
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+```bash
+# The app (the repository must be public, or the clone will ask for credentials)
 git clone https://github.com/ParishruthiGanesh/Agentic_Cinema.git
 cd Agentic_Cinema
 git checkout claude/cinemory-hackathon-build-hp9mep   # or main once merged
@@ -58,8 +64,11 @@ GOOGLE_OAUTH_CLIENT_ID=<client id>   # add PUBLIC_URL to its authorised origins 
 Save (Ctrl+O, Enter, Ctrl+X), then:
 
 ```bash
-docker compose -f deploy/compose.yml up -d --build
+docker compose --env-file .env -f deploy/compose.yml up -d --build
 ```
+
+`--env-file .env` matters: without it Compose looks for an `.env` next to `compose.yml` and the web
+app would be built with an empty API address.
 
 The first build takes 5–10 minutes. Then open your address. Caddy fetches the certificate on the first request (give it up to a minute).
 
@@ -67,17 +76,18 @@ The first build takes 5–10 minutes. Then open your address. Caddy fetches the 
 
 ```bash
 curl -s https://previewpal.duckdns.org/api/health
-docker compose -f deploy/compose.yml logs -f api   # Ctrl+C to stop following
+docker compose --env-file .env -f deploy/compose.yml logs -f api   # Ctrl+C to stop following
 ```
 
 ## Updating
 
 ```bash
-cd ~/Agentic_Cinema && git pull && docker compose -f deploy/compose.yml up -d --build
+cd ~/Agentic_Cinema && git pull && docker compose --env-file .env -f deploy/compose.yml up -d --build
 ```
 
 ## Notes
 
 - Data lives in the Docker volume `data` (SQLite + media). `docker compose down` keeps it; `docker compose down -v` deletes it.
 - The studio is reachable at `/studio` on the same address; it is not linked from the family app.
+- Turn **idle scaling off** on the ClickHouse Cloud service while you demo: the API refuses to start while the service is asleep.
 - Delete the VM after the hackathon to stop the charge (about $25/month for e2-medium).
