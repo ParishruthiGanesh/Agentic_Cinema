@@ -19,14 +19,15 @@ HTTPS needs a hostname. Free and quick: <https://www.duckdns.org> → sign in �
 
 ## 3. On the VM
 
-Click **SSH** next to the VM in the console and paste, one block at a time:
+Click **SSH** next to the VM in the console — the prompt must read `…@previewpal`, not `…@cloudshell`; Cloud Shell is a different, throwaway machine — and paste, one block at a time:
 
 ```bash
 # Docker
 sudo apt-get update && sudo apt-get install -y ca-certificates curl git
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+. /etc/os-release   # $ID and $VERSION_CODENAME: works on Ubuntu and Debian alike
+curl -fsSL https://download.docker.com/linux/$ID/gpg | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$ID $VERSION_CODENAME stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 sudo usermod -aG docker $USER && newgrp docker
 ```
